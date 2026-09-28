@@ -1,6 +1,6 @@
 Simple Loadout System for Controller
 ====================================
-Version 1.0.0
+Version 1.0.1
 
 Loadouts at the top of SkyUI's inventory, built for the controller. Press Up on the first row of the item list to
 reach the loadout bar, pick a loadout, and everything you equip while it is active becomes that loadout. Switch to

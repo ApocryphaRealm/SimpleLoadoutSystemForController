@@ -2,6 +2,13 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
+## 1.0.1 - 2026-09-27 - working
+
+- Fixed a crash when switching back to a loadout. Bringing gear out of a loadout's storage equipped it through the
+  item's old data, which the game can merge or free while it moves the item; the crash came on a later switch. Each
+  piece is now found again in your inventory after the move (by its enchantment, tempering and name) and equipped from
+  there. Tested: five round trips with a full armour set and a weapon, no crash.
+
 ## 1.0.0 - 2026-09-27 - working
 
 First version.

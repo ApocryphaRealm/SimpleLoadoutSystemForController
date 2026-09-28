@@ -121,6 +121,52 @@ namespace loadouts
 			return moved;
 		}
 
+		// What tells one copy of an item from another: a piece with none of these is equipped as a plain item.
+		struct Identity
+		{
+			bool special = false;
+			const RE::EnchantmentItem* enchantment = nullptr;
+			float health = 1.0F;
+			std::string name;
+		};
+
+		Identity IdentityOf(RE::TESBoundObject* a_object, RE::ExtraDataList* a_extra)
+		{
+			Identity id;
+			if (!a_extra) { return id; }
+			if (const auto* e = a_extra->GetByType<RE::ExtraEnchantment>(); e && e->enchantment) {
+				id.enchantment = e->enchantment;
+				id.special = true;
+			}
+			if (const auto* h = a_extra->GetByType<RE::ExtraHealth>(); h) {
+				id.health = h->health;
+				id.special = id.special || h->health != 1.0F;
+			}
+			if (a_extra->HasType(RE::ExtraDataType::kTextDisplayData)) {
+				const char* n = a_extra->GetDisplayName(a_object);
+				id.name = n ? n : "";
+				id.special = true;
+			}
+			return id;
+		}
+
+		// The same piece, now in the player's inventory and not worn - or nullptr for a plain one.
+		RE::ExtraDataList* FindInInventory(RE::PlayerCharacter* a_player, RE::TESBoundObject* a_object, const Identity& a_id)
+		{
+			if (!a_id.special) { return nullptr; }
+			auto* changes = a_player->GetInventoryChanges();
+			if (!changes || !changes->entryList) { return nullptr; }
+			for (auto* entry : *changes->entryList) {
+				if (!entry || entry->object != a_object || !entry->extraLists) { continue; }
+				for (auto* x : *entry->extraLists) {
+					if (!x || x->HasType(RE::ExtraDataType::kWorn) || x->HasType(RE::ExtraDataType::kWornLeft)) { continue; }
+					const Identity other = IdentityOf(a_object, x);
+					if (other.enchantment == a_id.enchantment && other.health == a_id.health && other.name == a_id.name) { return x; }
+				}
+			}
+			return nullptr;
+		}
+
 		// The loadout's container empties into the inventory and every piece is equipped; weapons go back to the hand
 		// they were in.
 		int Restore(RE::PlayerCharacter* a_player, int a_from)
@@ -158,6 +204,11 @@ namespace loadouts
 			int restored = 0;
 			bool leftUsed = false;
 			for (const auto& p : pieces) {
+				// The move may merge or free the ExtraDataList it is given, so p.extra is never used after RemoveItem
+				// (1.0.0 equipped through it and crashed on a later switch, 2026-09-27). What makes the piece itself -
+				// its enchantment, tempering and name - is noted first, and the same piece is found again in the
+				// player's inventory after the move.
+				const Identity id = IdentityOf(p.object, p.extra);
 				storage->RemoveItem(p.object, p.count, RE::ITEM_REMOVE_REASON::kStoreInContainer, p.extra, a_player);
 				const RE::BGSEquipSlot* slot = nullptr;
 				if (p.object->IsWeapon()) {
@@ -165,7 +216,7 @@ namespace loadouts
 					leftUsed = leftUsed || wantLeft;
 					slot = wantLeft ? Slot(true) : nullptr;   // the default slot covers the right hand and two-handers
 				}
-				equip->EquipObject(a_player, p.object, p.extra, p.count, slot, false, false, true, true);
+				equip->EquipObject(a_player, p.object, FindInInventory(a_player, p.object, id), p.count, slot, false, false, true, true);
 				++restored;
 			}
 			return restored;
