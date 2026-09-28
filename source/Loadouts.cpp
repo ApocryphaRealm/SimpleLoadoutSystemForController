@@ -80,7 +80,11 @@ namespace loadouts
 
 		void Notify(const std::string& a_text)
 		{
+#if RUNTIME_LINE == 17
+			RE::SendHUDMessage::ShowHUDMessage(a_text.c_str(), nullptr, true);   // CommonLibSSE-NG 7.x has no RE::DebugNotification
+#else
 			RE::DebugNotification(a_text.c_str());
+#endif
 		}
 
 		std::string Name(int a_loadout)
