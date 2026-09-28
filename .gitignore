@@ -1,0 +1,6 @@
+.vs/
+build/
+swf/HUDMenu/
+
+*.zip
+build-*.log

@@ -1,0 +1,11 @@
+{
+    "name": "simpleloadoutsystemforcontroller-17",
+    "version-string": "1.0.0",
+    "description": "Loadouts at the top of the SkyUI inventory: pick a loadout and everything you equip becomes it; switch away and that gear goes into the loadout's own storage, out of your inventory and your carry weight.",
+    "homepage": "https://github.com/ApocryphaRealm/SimpleLoadoutSystemForController",
+    "license": "GPL-3.0-or-later",
+    "dependencies": [
+        "commonlibsse-ng"
+    ],
+    "builtin-baseline": "127402f1c75bb3d5ff6bce04b285faa4930a5aca"
+}
