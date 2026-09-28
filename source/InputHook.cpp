@@ -1,6 +1,7 @@
 #include "InputHook.h"
 
 #include "Bar.h"
+#include "MainThread.h"
 #include "SelfCheck.h"
 #include "utils/Logger.h"
 
@@ -129,6 +130,7 @@ namespace InputHook
 
 			static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent** a_events)
 			{
+				mainthread::Service();   // DevBench questions that must be answered on this thread
 				if (auto* movie = InventoryInFront()) {
 					bar::Ensure(movie);
 					bar::ServiceInspect(movie);

@@ -1,5 +1,6 @@
 #include "DevBenchTool.h"
 #include "InputHook.h"
+#include "Loadouts.h"
 #include "SelfCheck.h"
 #include "Settings.h"
 
@@ -16,6 +17,7 @@ namespace
 			DevBenchTool::Init();
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
+			loadouts::Init();
 			DevBenchTool::Init(/* a_lastAttempt = */ true);
 			break;
 		default:
@@ -49,6 +51,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 	SelfCheck::Set("INI", true, settings::Get().iniFound ? settings::IniPath() + " read" : settings::IniPath() + " not found - defaults");
 
 	InputHook::Install();
+	loadouts::RegisterSerialization();
 
 	if (!SKSE::GetMessagingInterface()->RegisterListener("SKSE", OnSKSEMessage)) {
 		logger::error("Could not register the SKSE message listener; the DevBench tool will not appear");

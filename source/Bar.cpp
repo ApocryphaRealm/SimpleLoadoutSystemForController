@@ -1,11 +1,14 @@
 #include "Bar.h"
 
+#include "Loadouts.h"
 #include "SelfCheck.h"
 #include "Settings.h"
 #include "utils/Logger.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <format>
 #include <mutex>
@@ -50,6 +53,19 @@ namespace bar
 			Place(a_lists, "columnSelectButton", kFilterRowY, true);
 			Place(a_lists, "categoryList", kShift, false);
 			Place(a_lists, "itemList", kShift, false);
+			// The list's frame stays where it was, so the list gives up the shifted height: one row fewer, or the last
+			// row sits outside the frame (2026-09-27 capture, eight items).
+			RE::GFxValue list, height, rows, entry;
+			if (a_lists.GetMember("itemList", &list) && list.IsDisplayObject() && list.GetMember("_listHeight", &height) && height.IsNumber() &&
+				list.GetMember("_maxListIndex", &rows) && rows.IsNumber()) {
+				const double rowHeight = list.GetMember("entryHeight", &entry) && entry.IsNumber() && entry.GetNumber() > 0 ? entry.GetNumber() : kShift;
+				const int fewer = static_cast<int>(std::ceil(kShift / rowHeight));
+				list.SetMember("_listHeight", RE::GFxValue(height.GetNumber() - kShift));
+				list.SetMember("_maxListIndex", RE::GFxValue(std::max(1.0, rows.GetNumber() - fewer)));
+				list.Invoke("InvalidateData");
+			} else {
+				logger::warn("layout: SkyUI's list height not found - a long list may run past its frame");
+			}
 			RE::GFxValue label;
 			if (a_lists.GetMember("categoryLabel", &label) && label.IsDisplayObject()) { label.SetMember("_visible", RE::GFxValue(false)); }
 		}
@@ -166,6 +182,7 @@ namespace bar
 			std::scoped_lock l(g_lock);
 			g_snap.inventoryOpen = true;
 			g_snap.count = settings::Get().count;
+			g_snap.active = loadouts::Active();   // from the co-save after a load, or the last switch
 		}
 		RE::GFxValue existing;
 		if (a_movie == g_movie && a_movie->GetVariable(&existing, kBarPath) && existing.IsDisplayObject()) { return; }
@@ -257,14 +274,21 @@ namespace bar
 
 	void Choose(RE::GFxMovieView* a_movie)
 	{
-		int now;
+		int target;
 		{
 			std::scoped_lock l(g_lock);
-			g_snap.active = g_snap.active == g_snap.cursor ? -1 : g_snap.cursor;
-			now = g_snap.active;
+			target = g_snap.active == g_snap.cursor ? -1 : g_snap.cursor;
 		}
-		// Stage 1: the choice only; moving equipment comes in stage 2.
-		logger::info("loadout {}", now >= 0 ? std::format("{} selected", now + 1) : std::string("deselected"));
+		std::string why;
+		if (!loadouts::Request(target, why)) {
+			Decide("switch refused: " + why);
+			return;
+		}
+		{
+			std::scoped_lock l(g_lock);
+			g_snap.active = target;   // the move runs as a task right after this dispatch
+		}
+		Decide(target >= 0 ? std::format("loadout {} selected", target + 1) : std::string("loadout deselected"));
 		Redraw(a_movie);
 	}
 

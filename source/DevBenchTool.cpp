@@ -2,6 +2,8 @@
 
 #include "Bar.h"
 #include "DevBench/DevBenchAPI.h"
+#include "Loadouts.h"
+#include "MainThread.h"
 #include "SelfCheck.h"
 #include "utils/Logger.h"
 
@@ -37,6 +39,11 @@ namespace DevBenchTool
 
 		void Tool(void*, const char* a_argsJson, void* a_sink, DevBenchAPI::WriteFn a_write)
 		{
+			if (a_argsJson && std::string_view(a_argsJson).find("\"contents\"") != std::string_view::npos) {
+				const std::string r = mainthread::Run([] { return loadouts::ContentsJson(); }, 2000);
+				a_write(a_sink, r.empty() ? R"({"ok":false,"error":"no game frame within 2 s"})" : r.c_str());
+				return;
+			}
 			if (const std::string path = PathArg(a_argsJson); !path.empty()) {
 				const std::string r = bar::Inspect(path, 2000);
 				a_write(a_sink, r.empty() ? R"({"ok":false,"error":"no answer within 2 s - is the inventory open?"})" : (R"({"ok":true,"op":"inspect",)" + r.substr(1)).c_str());
