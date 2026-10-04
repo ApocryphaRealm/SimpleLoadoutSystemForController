@@ -2,7 +2,7 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
-## 1.0.2 - 2026-10-04 - untested
+## 1.0.2 - 2026-10-04 - working
 
 - New: Always worn. The bar gains a last box, "Always worn", for gear that stays on through every loadout switch - a
   ring or necklace worn with every outfit (asked for on the Nexus page). Select it, wear what should always be worn,
@@ -13,6 +13,9 @@ Every version, beside the code it describes. Status is the version ledger's word
 - The bar's text and the mod's messages are translated into the eleven languages (Interface/Translations), following
   the game's language. A button name too long for its box is drawn smaller instead of running out of it.
 - DevBench "contents" lists the always-worn set.
+- Tested in game (SE line, Njordlinger): boots and a ring as always worn, a loadout's own boots and ring winning the
+  slot and the always-worn piece going back on, and the set surviving a save and reload. The 1.7 line is built from the
+  same source and was not run.
 
 ## 1.0.1 - 2026-09-27 - working
 
