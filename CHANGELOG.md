@@ -2,6 +2,18 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
+## 1.0.2 - 2026-10-04 - untested
+
+- New: Always worn. The bar gains a last box, "Always worn", for gear that stays on through every loadout switch - a
+  ring or necklace worn with every outfit (asked for on the Nexus page). Select it, wear what should always be worn,
+  and leave it: whatever is worn then is the set. No switch stores or unequips those pieces. A loadout's own piece
+  for the same slot wins; the always-worn piece then waits in the inventory and goes back on after the next switch
+  that frees the slot. A copy of an always-worn piece stored in a loadout stays in storage while the worn one is on.
+  The set (item and enchantment, so an enchanted ring is told from a plain one) is kept in the SKSE co-save.
+- The bar's text and the mod's messages are translated into the eleven languages (Interface/Translations), following
+  the game's language. A button name too long for its box is drawn smaller instead of running out of it.
+- DevBench "contents" lists the always-worn set.
+
 ## 1.0.1 - 2026-09-27 - working
 
 - Fixed a crash when switching back to a loadout. Bringing gear out of a loadout's storage equipped it through the

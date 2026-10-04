@@ -1,6 +1,6 @@
 Simple Loadout System for Controller
 ====================================
-Version 1.0.1
+Version 1.0.2
 
 Loadouts at the top of SkyUI's inventory, built for the controller. Press Up on the first row of the item list to
 reach the loadout bar, pick a loadout, and everything you equip while it is active becomes that loadout. Switch to
@@ -21,6 +21,12 @@ HOW IT WORKS
   inventory item again, ready for another loadout.
 - Switching away stores everything you are wearing in that loadout's storage. The inventory itself is the loadout
   view: a loadout's gear is in your inventory only while that loadout is active.
+- Always worn: the last box on the bar holds gear that stays on through every switch - a ring or necklace you wear
+  with every loadout. Select "Always worn", equip (or unequip) what you always want on, then pick a loadout or press
+  A on "Always worn" again: whatever you were wearing when you left the box is the always-worn set, and a message says
+  how many pieces it holds. Switching never stores or takes off those pieces. If a loadout holds its own piece for the
+  same slot (another ring, say), the loadout's piece is worn and the always-worn one waits in your inventory; it goes
+  back on after the next switch that frees the slot. To change the set, select "Always worn" again.
 - Armour, clothing, jewellery, weapons, shields and ammunition are loadout gear. Spells, shouts, powers and torches
   are left alone. Quest items never leave your inventory. Items that other mods equip out of sight are never touched.
 - Each loadout has its own storage container, placed by the plugin in a cell of its own: the containers never
@@ -34,6 +40,9 @@ Data/SKSE/Plugins/SimpleLoadoutSystemForController.ini (edit it with the game cl
 - iLoadoutCount   how many loadout buttons (1-10, default 5)
 - sLoadoutName1-10   the buttons' names ("Loadout N" when empty)
 - uLogLevel   log detail (2 = info)
+
+The bar's own text and the mod's messages follow the game's language (English, Japanese, Korean, Chinese, Russian,
+German, French, Spanish, Italian, Polish, Czech): Interface/Translations/SimpleLoadoutSystemForController_<language>.txt.
 
 
 REQUIREMENTS

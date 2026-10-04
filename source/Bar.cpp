@@ -4,6 +4,7 @@
 #include "SelfCheck.h"
 #include "Settings.h"
 #include "utils/Logger.h"
+#include "utils/Strings.h"
 
 #include <algorithm>
 #include <array>
@@ -83,6 +84,12 @@ namespace bar
 
 		double ButtonWidth(int a_count) { return (kWidth - kGap * (a_count - 1)) / a_count; }
 
+		// The bar holds the loadouts and, after them, the "Always worn" box: count + 1 buttons.
+		int Buttons(int a_count) { return a_count + 1; }
+
+		// The button index for a loadouts::Active() value.
+		int ButtonOf(int a_active, int a_count) { return a_active == loadouts::kAlwaysWorn ? a_count : a_active; }
+
 		RE::GFxValue Num(double a_v) { return RE::GFxValue(a_v); }
 
 		void Rect(RE::GFxValue& a_clip, double a_x, double a_y, double a_w, double a_h, std::uint32_t a_fill, double a_alpha,
@@ -105,7 +112,8 @@ namespace bar
 			a_clip.Invoke("endFill");
 		}
 
-		// One button: its own clip (drawn shape) and a text field. Redrawn whole on every state change.
+		// One button: its own clip (drawn shape) and a text field. Redrawn whole on every state change. a_count is the
+		// number of buttons; the last one is "Always worn".
 		void DrawButton(RE::GFxMovieView* a_movie, RE::GFxValue& a_bar, int a_i, int a_count, bool a_cursor, bool a_active)
 		{
 			RE::GFxValue button;
@@ -138,16 +146,26 @@ namespace bar
 			RE::GFxValue font;
 			a_movie->CreateString(&font, "$EverywhereMediumFont");
 			format.SetMember("font", font);
-			format.SetMember("size", Num(15.0));
 			format.SetMember("color", Num(static_cast<double>(a_active ? kTextActive : kText)));
 			RE::GFxValue align;
 			a_movie->CreateString(&align, "center");
 			format.SetMember("align", align);
 			const auto& names = settings::Get().names;
-			const std::string text = a_i < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(a_i)] : std::format("Loadout {}", a_i + 1);
+			const bool alwaysWorn = a_i == a_count - 1;
+			const std::string text = alwaysWorn ? strings::TR("SLSC_AlwaysWorn", "Always worn")
+								   : a_i < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(a_i)]
+																			: std::format("Loadout {}", a_i + 1);
 			field.SetText(text.c_str());
-			std::array<RE::GFxValue, 1> fmt{ format };
-			field.Invoke("setTextFormat", fmt);
+			// 15 pt, smaller until the name fits its button (ten loadouts and "Always worn" share 565 px).
+			RE::GFxValue measured;
+			double size = 15.0;
+			for (;; size -= 1.0) {
+				format.SetMember("size", Num(size));
+				std::array<RE::GFxValue, 1> fmt{ format };
+				field.Invoke("setTextFormat", fmt);
+				if (size <= 10.0 || !field.GetMember("textWidth", &measured) || !measured.IsNumber() || measured.GetNumber() <= w - 6.0) { break; }
+			}
+			logger::debug("bar: button {} \"{}\" at {} pt", a_i, text, size);
 		}
 
 		void Redraw(RE::GFxMovieView* a_movie)
@@ -160,8 +178,10 @@ namespace bar
 				std::scoped_lock l(g_lock);
 				s = g_snap;
 			}
-			for (int i = 0; i < s.count; ++i) {
-				DrawButton(a_movie, bar, i, s.count, s.focused && i == s.cursor, i == s.active);
+			const int buttons = Buttons(s.count);
+			const int active = ButtonOf(s.active, s.count);
+			for (int i = 0; i < buttons; ++i) {
+				DrawButton(a_movie, bar, i, buttons, s.focused && i == s.cursor, i == active);
 			}
 		}
 	}
@@ -186,6 +206,7 @@ namespace bar
 		}
 		RE::GFxValue existing;
 		if (a_movie == g_movie && a_movie->GetVariable(&existing, kBarPath) && existing.IsDisplayObject()) { return; }
+		strings::Tick();   // once per opening: follows a language change (AMF's, or the game's)
 
 		RE::GFxValue lists;
 		if (!a_movie->GetVariable(&lists, kListsPath) || !lists.IsDisplayObject()) {
@@ -213,7 +234,7 @@ namespace bar
 			built = ++g_snap.builtCount;
 		}
 		Redraw(a_movie);
-		logger::info("bar: drawn into the inventory (opening {}), {} buttons at depth {}", built, settings::Get().count, d);
+		logger::info("bar: drawn into the inventory (opening {}), {} loadout buttons and Always worn at depth {}", built, settings::Get().count, d);
 		if (built == 1) { SelfCheck::Set("Bar", true, "drawn into SkyUI's inventory"); }
 	}
 
@@ -257,7 +278,7 @@ namespace bar
 			std::scoped_lock l(g_lock);
 			if (g_snap.focused == a_on) { return; }
 			g_snap.focused = a_on;
-			if (a_on) { g_snap.cursor = g_snap.active >= 0 ? g_snap.active : 0; }
+			if (a_on) { g_snap.cursor = g_snap.active != -1 ? ButtonOf(g_snap.active, g_snap.count) : 0; }
 		}
 		Redraw(a_movie);
 	}
@@ -267,7 +288,8 @@ namespace bar
 		{
 			std::scoped_lock l(g_lock);
 			if (g_snap.count <= 0) { return; }
-			g_snap.cursor = (g_snap.cursor + a_delta + g_snap.count) % g_snap.count;
+			const int buttons = Buttons(g_snap.count);
+			g_snap.cursor = (g_snap.cursor + a_delta + buttons) % buttons;
 		}
 		Redraw(a_movie);
 	}
@@ -277,7 +299,8 @@ namespace bar
 		int target;
 		{
 			std::scoped_lock l(g_lock);
-			target = g_snap.active == g_snap.cursor ? -1 : g_snap.cursor;
+			const int chosen = g_snap.cursor == g_snap.count ? loadouts::kAlwaysWorn : g_snap.cursor;
+			target = g_snap.active == chosen ? -1 : chosen;
 		}
 		std::string why;
 		if (!loadouts::Request(target, why)) {
@@ -288,7 +311,7 @@ namespace bar
 			std::scoped_lock l(g_lock);
 			g_snap.active = target;   // the move runs as a task right after this dispatch
 		}
-		Decide(target >= 0 ? std::format("loadout {} selected", target + 1) : std::string("loadout deselected"));
+		Decide(target >= 0 ? std::format("loadout {} selected", target + 1) : target == loadouts::kAlwaysWorn ? std::string("Always worn selected") : std::string("loadout deselected"));
 		Redraw(a_movie);
 	}
 

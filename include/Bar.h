@@ -16,9 +16,9 @@ namespace bar
 		bool inventoryOpen = false;
 		bool built = false;
 		bool focused = false;
-		int cursor = 0;          // the button the bar's highlight is on
-		int active = -1;         // the selected loadout, -1 for none
-		int count = 0;
+		int cursor = 0;          // the button the bar's highlight is on (count = the "Always worn" box)
+		int active = -1;         // loadouts::Active(): a loadout, -1 for none, loadouts::kAlwaysWorn
+		int count = 0;           // loadout buttons; the bar draws count + 1 with "Always worn"
 		int listIndex = -2;      // SkyUI's item list selectedIndex (-2 = could not read)
 		int builtCount = 0;      // how many inventory openings the bar was drawn into
 		std::string lastDecision;

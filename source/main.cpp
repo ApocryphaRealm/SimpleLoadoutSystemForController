@@ -6,6 +6,7 @@
 
 #include "utils/Logger.h"
 #include "utils/AddressLibraryGuard.h"   // uses logger, so after Logger.h
+#include "utils/Strings.h"
 
 namespace
 {
@@ -17,6 +18,7 @@ namespace
 			DevBenchTool::Init();
 			break;
 		case SKSE::MessagingInterface::kDataLoaded:
+			strings::Configure("SimpleLoadoutSystemForController");   // Interface\Translations\SimpleLoadoutSystemForController_<language>.txt
 			loadouts::Init();
 			DevBenchTool::Init(/* a_lastAttempt = */ true);
 			break;
