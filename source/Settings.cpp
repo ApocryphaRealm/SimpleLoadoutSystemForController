@@ -31,10 +31,13 @@ namespace settings
 			if (name.empty()) { name = std::format("Loadout {}", i); }
 			g_values.names.push_back(std::move(name));
 		}
+		// Default false = the shipped INI's bAllowSwitchInCombat=0 (rule 16): a missing key keeps 1.0.2's refusal in combat.
+		g_values.allowSwitchInCombat = GetPrivateProfileIntA("General", "bAllowSwitchInCombat", 0, full.c_str()) != 0;
 		g_values.logLevel = std::clamp(static_cast<int>(GetPrivateProfileIntA("Debug", "uLogLevel", 2, full.c_str())), 0, 6);
 
-		logger::info("settings: {} ({}), {} loadouts, log level {}", g_path, g_values.iniFound ? "found" : "not found - defaults",
-					 g_values.count, g_values.logLevel);
+		logger::info("settings: {} ({}), {} loadouts, switching in combat {}, log level {}", g_path,
+					 g_values.iniFound ? "found" : "not found - defaults", g_values.count,
+					 g_values.allowSwitchInCombat ? "allowed" : "refused", g_values.logLevel);
 	}
 
 	const Values& Get() { return g_values; }

@@ -2,6 +2,17 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
+## 1.0.3 - 2026-10-13 - untested
+
+### Added
+- New INI option [General] bAllowSwitchInCombat (default 0). At 0 nothing changes: a switch in combat is refused with 'You cannot change loadouts in combat'. At 1 loadouts can be switched during combat; everything else about a switch is the same. Set it in SimpleLoadoutSystemForController.ini with the game closed (asked for on the Nexus page by screamline).
+
+### Changed
+- DevBench 'loadouts' state reports allowSwitchInCombat; the log's settings line names it.
+
+### Known
+- Unchanged by design (the author's ruling, 2026-10-13): a weapon equipped while a loadout is active belongs to that loadout and is stored with it on a switch. To use it with another loadout, take it out of the first loadout into the inventory first.
+
 ## 1.0.2 - 2026-10-04 - working
 
 - New: Always worn. The bar gains a last box, "Always worn", for gear that stays on through every loadout switch - a

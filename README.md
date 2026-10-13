@@ -1,6 +1,6 @@
 Simple Loadout System for Controller
 ====================================
-Version 1.0.2
+Version 1.0.3
 
 Loadouts at the top of SkyUI's inventory, built for the controller. Press Up on the first row of the item list to
 reach the loadout bar, pick a loadout, and everything you equip while it is active becomes that loadout. Switch to
@@ -31,7 +31,7 @@ HOW IT WORKS
   are left alone. Quest items never leave your inventory. Items that other mods equip out of sight are never touched.
 - Each loadout has its own storage container, placed by the plugin in a cell of its own: the containers never
   respawn and the cell never resets, so stored gear is safe.
-- You cannot change loadouts in combat.
+- By default you cannot change loadouts in combat. Set bAllowSwitchInCombat=1 in the INI to allow it.
 
 
 SETTINGS
@@ -39,6 +39,7 @@ SETTINGS
 Data/SKSE/Plugins/SimpleLoadoutSystemForController.ini (edit it with the game closed):
 - iLoadoutCount   how many loadout buttons (1-10, default 5)
 - sLoadoutName1-10   the buttons' names ("Loadout N" when empty)
+- bAllowSwitchInCombat   1 = loadouts can be switched during combat; 0 = refused in combat (default 0)
 - uLogLevel   log detail (2 = info)
 
 The bar's own text and the mod's messages follow the game's language (English, Japanese, Korean, Chinese, Russian,

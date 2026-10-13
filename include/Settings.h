@@ -12,6 +12,7 @@ namespace settings
 	{
 		int count = 5;                        // [General] iLoadoutCount, 1-10
 		std::vector<std::string> names;       // [General] sLoadoutName1..10, "Loadout N" when empty
+		bool allowSwitchInCombat = false;     // [General] bAllowSwitchInCombat, 0 = no switching in combat (the shipped INI says 0)
 		int logLevel = 2;                     // [Debug] uLogLevel (spdlog levels, 2 = info)
 		bool iniFound = false;
 	};

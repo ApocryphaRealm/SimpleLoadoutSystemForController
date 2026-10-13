@@ -546,9 +546,13 @@ namespace loadouts
 			return false;
 		}
 		if (player->IsInCombat()) {
-			a_why = "in combat";
-			Notify(strings::TR("SLSC_InCombat", "You cannot change loadouts in combat"));
-			return false;
+			if (!settings::Get().allowSwitchInCombat) {
+				a_why = "in combat";
+				logger::debug("request {}: refused - in combat and bAllowSwitchInCombat=0", a_loadout);
+				Notify(strings::TR("SLSC_InCombat", "You cannot change loadouts in combat"));
+				return false;
+			}
+			logger::debug("request {}: in combat - allowed by bAllowSwitchInCombat=1", a_loadout);
 		}
 		if (g_busy.exchange(true)) {
 			a_why = "a switch is already running";

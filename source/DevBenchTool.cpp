@@ -5,6 +5,7 @@
 #include "Loadouts.h"
 #include "MainThread.h"
 #include "SelfCheck.h"
+#include "Settings.h"
 #include "utils/Logger.h"
 
 #include <format>
@@ -51,8 +52,9 @@ namespace DevBenchTool
 			}
 			const auto s = bar::GetSnapshot();
 			const std::string json = std::format(
-				R"({{"ok":true,"op":"state","inventoryOpen":{},"built":{},"focused":{},"cursor":{},"active":{},"count":{},"listIndex":{},"builtCount":{},"lastDecision":"{}"}})",
-				s.inventoryOpen, s.built, s.focused, s.cursor, s.active, s.count, s.listIndex, s.builtCount, Escape(s.lastDecision));
+				R"({{"ok":true,"op":"state","inventoryOpen":{},"built":{},"focused":{},"cursor":{},"active":{},"count":{},"listIndex":{},"builtCount":{},"allowSwitchInCombat":{},"lastDecision":"{}"}})",
+				s.inventoryOpen, s.built, s.focused, s.cursor, s.active, s.count, s.listIndex, s.builtCount, settings::Get().allowSwitchInCombat,
+				Escape(s.lastDecision));
 			a_write(a_sink, json.c_str());
 		}
 	}
@@ -71,7 +73,7 @@ namespace DevBenchTool
 		}
 		constexpr const char* descriptor =
 			"{\"description\":\"Simple Loadout System for Controller' bar: whether the inventory is open and the bar drawn, focus, the highlighted "
-			"button (cursor), the active loadout (-1 none), SkyUI's item-list row, and the last input decision.\","
+			"button (cursor), the active loadout (-1 none), SkyUI's item-list row, whether bAllowSwitchInCombat is on, and the last input decision.\","
 			"\"inputSchema\":{\"type\":\"object\",\"properties\":{\"op\":{\"type\":\"string\"}}},\"readOnly\":true}";
 		if (devBench->RegisterTool("loadouts", descriptor, &Tool, nullptr)) {
 			registered = true;
