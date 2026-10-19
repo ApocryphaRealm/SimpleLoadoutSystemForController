@@ -2,13 +2,17 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
-## 1.0.3 - 2026-10-13 - untested
+## 1.0.3 - 2026-10-13 - working
 
 ### Added
 - New INI option [General] bAllowSwitchInCombat (default 0). At 0 nothing changes: a switch in combat is refused with 'You cannot change loadouts in combat'. At 1 loadouts can be switched during combat; everything else about a switch is the same. Set it in SimpleLoadoutSystemForController.ini with the game closed (asked for on the Nexus page by screamline).
 
 ### Changed
 - DevBench 'loadouts' state reports allowSwitchInCombat; the log's settings line names it.
+
+### Tested
+- In game (SE line, Njordlinger, player in combat state): at bAllowSwitchInCombat=0 a switch in combat is refused with "You cannot change loadouts in combat" and nothing moves; at 1 (kept across a restart) a switch in combat works in both directions with no refusal and the worn weapons swap; out of combat both settings switch as before; the weapon tie is unchanged. The 1.7 line is built from the same source and was not run.
+- Another mod that blocks equipping in combat (No Combat Equip) still stops the weapon swap itself; turn it off to switch weapons in combat.
 
 ### Known
 - Unchanged by design (the author's ruling, 2026-10-13): a weapon equipped while a loadout is active belongs to that loadout and is stored with it on a switch. To use it with another loadout, take it out of the first loadout into the inventory first.
