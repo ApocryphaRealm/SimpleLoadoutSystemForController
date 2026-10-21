@@ -82,13 +82,34 @@ namespace bar
 		Snapshot g_snap;
 		RE::GFxMovieView* g_movie = nullptr;   // the opening the bar was drawn into (identity only, never dereferenced late)
 
-		double ButtonWidth(int a_count) { return (kWidth - kGap * (a_count - 1)) / a_count; }
+		// Layout (the owner, 2026-10-21): "Always worn" is fixed at the far left, before Loadout 1; the loadouts scroll
+		// inside a fixed-width strip beside it, so ten of them never run past the bar's width (the category icons'
+		// width - the bar lives in SkyUI's left-hand lists, clear of Inventory Reforged's right-hand panel).
+		inline constexpr int kVisible = 5;                 // loadout buttons shown at once
+		inline constexpr double kAlwaysWidth = 100.0;      // the fixed "Always worn" box
+		inline constexpr double kArrow = 14.0;             // the gutter at each end of the strip for the "more" arrows
+		inline constexpr double kStripX = kLeft + kAlwaysWidth + kGap;                       // strip start (arrow gutter first)
+		inline constexpr double kButtonsX = kStripX + kArrow;                                // first loadout button
+		inline constexpr double kButtonsW = kLeft + kWidth - kArrow - kButtonsX;             // the buttons' share of the strip
+		inline constexpr double kButtonW = (kButtonsW - kGap * (kVisible - 1)) / kVisible;   // one loadout button
+		inline constexpr int kAlways = -1;                 // cursor value of the "Always worn" box
 
-		// The bar holds the loadouts and, after them, the "Always worn" box: count + 1 buttons.
-		int Buttons(int a_count) { return a_count + 1; }
+		int Visible(int a_count) { return std::min(a_count, kVisible); }
+		int MaxFirst(int a_count) { return std::max(0, a_count - kVisible); }
+		double SlotX(int a_slot) { return kButtonsX + a_slot * (kButtonW + kGap); }
 
-		// The button index for a loadouts::Active() value.
-		int ButtonOf(int a_active, int a_count) { return a_active == loadouts::kAlwaysWorn ? a_count : a_active; }
+		// The cursor value for a loadouts::Active() value (callers check for -1, none, first).
+		int ButtonOf(int a_active) { return a_active == loadouts::kAlwaysWorn ? kAlways : a_active; }
+
+		// Keep the highlighted loadout in the visible window (caller holds g_lock).
+		void KeepInView(Snapshot& a_s)
+		{
+			a_s.first = std::clamp(a_s.first, 0, MaxFirst(a_s.count));
+			if (a_s.cursor < 0) { return; }
+			if (a_s.cursor < a_s.first) { a_s.first = a_s.cursor; }
+			if (a_s.cursor >= a_s.first + kVisible) { a_s.first = a_s.cursor - kVisible + 1; }
+			a_s.first = std::clamp(a_s.first, 0, MaxFirst(a_s.count));
+		}
 
 		RE::GFxValue Num(double a_v) { return RE::GFxValue(a_v); }
 
@@ -112,27 +133,36 @@ namespace bar
 			a_clip.Invoke("endFill");
 		}
 
-		// One button: its own clip (drawn shape) and a text field. Redrawn whole on every state change. a_count is the
-		// number of buttons; the last one is "Always worn".
-		void DrawButton(RE::GFxMovieView* a_movie, RE::GFxValue& a_bar, int a_i, int a_count, bool a_cursor, bool a_active)
+		// One button: its own clip (drawn shape) and a text field. Redrawn whole on every state change. The slots are
+		// fixed places on the bar ("aw" for Always worn, "s0".. for the visible loadouts); scrolling changes the text.
+		struct Look
+		{
+			double y = kTop;
+			double h = kHeight;
+			double maxSize = 15.0;
+			bool boxed = true;          // false: just the text (a hint line)
+			const char* align = "center";
+		};
+
+		void DrawButton(RE::GFxMovieView* a_movie, RE::GFxValue& a_bar, const std::string& name, int a_depth, double x, double w,
+						const std::string& a_text, bool a_cursor, bool a_active, const Look& a_look = {})
 		{
 			RE::GFxValue button;
-			const std::string name = std::format("b{}", a_i);
 			if (!a_bar.GetMember(name.c_str(), &button) || !button.IsDisplayObject()) {
-				if (!a_bar.CreateEmptyMovieClip(&button, name.c_str(), a_i + 1) || !button.IsDisplayObject()) {
+				if (!a_bar.CreateEmptyMovieClip(&button, name.c_str(), a_depth) || !button.IsDisplayObject()) {
 					logger::warn("bar: could not create button clip {}", name);
 					return;
 				}
 			}
 			button.Invoke("clear");
-			const double w = ButtonWidth(a_count);
-			const double x = kLeft + a_i * (w + kGap);
-			Rect(button, x, kTop, w, kHeight, a_active ? kFillActive : kFill, a_active ? 95.0 : 80.0,
-				 a_cursor ? kEdgeCursor : kEdge, a_cursor ? 2.0 : 1.0);
+			if (a_look.boxed) {
+				Rect(button, x, a_look.y, w, a_look.h, a_active ? kFillActive : kFill, a_active ? 95.0 : 80.0,
+					 a_cursor ? kEdgeCursor : kEdge, a_cursor ? 2.0 : 1.0);
+			}
 
 			RE::GFxValue field;
 			if (!button.GetMember("label", &field) || !field.IsDisplayObject()) {
-				std::array<RE::GFxValue, 6> args{ RE::GFxValue("label"), Num(1.0), Num(x), Num(kTop + 4.0), Num(w), Num(kHeight - 6.0) };
+				std::array<RE::GFxValue, 6> args{ RE::GFxValue("label"), Num(1.0), Num(x), Num(a_look.y + 4.0), Num(w), Num(a_look.h - 6.0) };
 				button.Invoke("createTextField", nullptr, args.data(), args.size());
 				if (!button.GetMember("label", &field) || !field.IsDisplayObject()) {
 					logger::warn("bar: could not create the label of {}", name);
@@ -148,24 +178,111 @@ namespace bar
 			format.SetMember("font", font);
 			format.SetMember("color", Num(static_cast<double>(a_active ? kTextActive : kText)));
 			RE::GFxValue align;
-			a_movie->CreateString(&align, "center");
+			a_movie->CreateString(&align, a_look.align);
 			format.SetMember("align", align);
-			const auto& names = settings::Get().names;
-			const bool alwaysWorn = a_i == a_count - 1;
-			const std::string text = alwaysWorn ? strings::TR("SLSC_AlwaysWorn", "Always worn")
-								   : a_i < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(a_i)]
-																			: std::format("Loadout {}", a_i + 1);
+			std::string text = a_text;
 			field.SetText(text.c_str());
-			// 15 pt, smaller until the name fits its button (ten loadouts and "Always worn" share 565 px).
+			// 15 pt, smaller until the name fits its button; at the smallest size a name that still does not fit is cut
+			// and ends in "...".
 			RE::GFxValue measured;
-			double size = 15.0;
+			auto fits = [&] { return !field.GetMember("textWidth", &measured) || !measured.IsNumber() || measured.GetNumber() <= w - 6.0; };
+			double size = a_look.maxSize;
 			for (;; size -= 1.0) {
 				format.SetMember("size", Num(size));
 				std::array<RE::GFxValue, 1> fmt{ format };
 				field.Invoke("setTextFormat", fmt);
-				if (size <= 10.0 || !field.GetMember("textWidth", &measured) || !measured.IsNumber() || measured.GetNumber() <= w - 6.0) { break; }
+				if (size <= 10.0 || fits()) { break; }
 			}
-			logger::debug("bar: button {} \"{}\" at {} pt", a_i, text, size);
+			bool cut = false;
+			while (!fits() && text.size() > 1) {
+				do { text.pop_back(); } while (text.size() > 1 && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80);   // whole UTF-8 characters
+				field.SetText((text + "...").c_str());
+				std::array<RE::GFxValue, 1> fmt{ format };
+				field.Invoke("setTextFormat", fmt);
+				cut = true;
+			}
+			logger::debug("bar: button {} \"{}\"{} at {} pt", name, text, cut ? " (cut)" : "", size);
+		}
+
+		// A small filled triangle in the strip's left or right gutter.
+		void Triangle(RE::GFxValue& a_clip, double a_x, bool a_left)
+		{
+			const double mid = kTop + kHeight / 2.0;
+			std::array<RE::GFxValue, 3> line{ Num(0.0), Num(0.0), Num(0.0) };
+			a_clip.Invoke("lineStyle", line);
+			std::array<RE::GFxValue, 2> fill{ Num(static_cast<double>(kTextActive)), Num(90.0) };
+			a_clip.Invoke("beginFill", fill);
+			const double tip = a_left ? a_x + 2.0 : a_x + kArrow - 2.0, base = a_left ? a_x + kArrow - 3.0 : a_x + 3.0;
+			std::array<RE::GFxValue, 2> p{ Num(tip), Num(mid) };
+			a_clip.Invoke("moveTo", p);
+			p = { Num(base), Num(mid - 6.0) };
+			a_clip.Invoke("lineTo", p);
+			p = { Num(base), Num(mid + 6.0) };
+			a_clip.Invoke("lineTo", p);
+			p = { Num(tip), Num(mid) };
+			a_clip.Invoke("lineTo", p);
+			a_clip.Invoke("endFill");
+		}
+
+		// A translated text with its "{}" filled in, by hand (a mangled translation must not throw on the main thread).
+		std::string Fill(const char* a_text, const std::string& a_value)
+		{
+			std::string s = a_text ? a_text : "";
+			if (const auto at = s.find("{}"); at != std::string::npos) { s.replace(at, 2, a_value); }
+			return s;
+		}
+
+		// The name on a loadout's button: the one the player gave it (saved with the game), else the INI's, else "Loadout N".
+		std::string LoadoutName(int a_i)
+		{
+			if (auto custom = loadouts::CustomName(a_i); !custom.empty()) { return custom; }
+			const auto& names = settings::Get().names;
+			return a_i < static_cast<int>(names.size()) ? names[static_cast<std::size_t>(a_i)] : std::format("Loadout {}", a_i + 1);
+		}
+
+		// The rename keyboard: a grid of keys drawn over the lists, walked with the D-pad.
+		inline constexpr std::array<const char*, 4> kKeyRows{ "1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm,.-" };
+		inline constexpr int kRenameRows = 5;   // four key rows and the action row
+		inline constexpr int kActions = 5;      // Shift, Space, Back, Clear, Save
+		inline constexpr double kPanelY = 60.0, kPanelH = 214.0, kCell = 30.0;
+
+		void DrawRename(RE::GFxMovieView* a_movie, RE::GFxValue& a_bar, const Snapshot& a_s)
+		{
+			RE::GFxValue panel;
+			if (!a_bar.GetMember("rename", &panel) || !panel.IsDisplayObject()) {
+				if (!a_s.renaming) { return; }
+				a_bar.CreateEmptyMovieClip(&panel, "rename", 40);
+				if (!panel.IsDisplayObject()) { return; }
+			}
+			panel.SetMember("_visible", RE::GFxValue(a_s.renaming));
+			if (!a_s.renaming) { return; }
+			panel.Invoke("clear");
+			Rect(panel, 4.0, kPanelY, kWidth + 12.0, kPanelH, 0x101010, 97.0, kEdge, 1.0);
+			const Look wide{ kPanelY + 6.0, 28.0, 15.0, true, "left" };
+			DrawButton(a_movie, panel, "title", 1, kLeft, kWidth - 12.0,
+					   Fill(strings::TR("SLSC_RenameTitle", "Rename loadout {}"), std::to_string(a_s.renameSlot + 1)) + ": " + a_s.renameText + "_", false, true, wide);
+			const double cell = (kWidth - 9.0 * 4.0) / 10.0;   // ten keys across the bar's width
+			for (int r = 0; r < 4; ++r) {
+				for (int c = 0; c < 10; ++c) {
+					char ch = kKeyRows[static_cast<std::size_t>(r)][c];
+					if (a_s.shift && ch >= 'a' && ch <= 'z') { ch = static_cast<char>(ch - 'a' + 'A'); }
+					const Look look{ kPanelY + 40.0 + r * kCell, kCell - 4.0, 15.0, true, "center" };
+					DrawButton(a_movie, panel, std::format("k{}_{}", r, c), 2 + r * 10 + c, kLeft + c * (cell + 4.0), cell, std::string(1, ch),
+							   a_s.keyRow == r && a_s.keyCol == c, false, look);
+				}
+			}
+			const std::array<std::string, kActions> labels{ strings::TR("SLSC_KeyShift", "Shift"), strings::TR("SLSC_KeySpace", "Space"),
+															strings::TR("SLSC_KeyBack", "Back"), strings::TR("SLSC_KeyClear", "Clear"),
+															strings::TR("SLSC_KeySave", "Save") };
+			const double aw = (kWidth - 4.0 * 4.0) / kActions;
+			for (int c = 0; c < kActions; ++c) {
+				const Look look{ kPanelY + 40.0 + 4 * kCell, kCell - 4.0, 15.0, true, "center" };
+				DrawButton(a_movie, panel, std::format("a{}", c), 50 + c, kLeft + c * (aw + 4.0), aw, labels[static_cast<std::size_t>(c)],
+						   a_s.keyRow == 4 && a_s.keyCol == c, c == 0 && a_s.shift, look);
+			}
+			const Look foot{ kPanelY + 40.0 + 5 * kCell + 2.0, 20.0, 12.0, false, "left" };
+			DrawButton(a_movie, panel, "foot", 60, kLeft, kWidth, strings::TR("SLSC_RenameHint", "A: type   X: erase   Y: save   B: cancel   (keyboard: type, Enter saves, Esc cancels)"),
+					   false, false, foot);
 		}
 
 		void Redraw(RE::GFxMovieView* a_movie)
@@ -176,13 +293,32 @@ namespace bar
 			Snapshot s;
 			{
 				std::scoped_lock l(g_lock);
+				if (g_snap.focused) { KeepInView(g_snap); }   // the highlight is always in view; the wheel may scroll it away only while off the bar
+				g_snap.first = std::clamp(g_snap.first, 0, MaxFirst(g_snap.count));
 				s = g_snap;
 			}
-			const int buttons = Buttons(s.count);
-			const int active = ButtonOf(s.active, s.count);
-			for (int i = 0; i < buttons; ++i) {
-				DrawButton(a_movie, bar, i, buttons, s.focused && i == s.cursor, i == active);
+			const int active = s.active == -1 ? -3 : ButtonOf(s.active);
+			DrawButton(a_movie, bar, "aw", 1, kLeft, kAlwaysWidth, strings::TR("SLSC_AlwaysWorn", "Always worn"), s.focused && s.cursor == kAlways,
+					   active == kAlways);
+			const int visible = Visible(s.count);
+			for (int slot = 0; slot < visible; ++slot) {
+				const int i = s.first + slot;
+				const std::string text = LoadoutName(i);
+				DrawButton(a_movie, bar, std::format("s{}", slot), 2 + slot, SlotX(slot), kButtonW, text, s.focused && s.cursor == i, i == active);
 			}
+			// More loadouts past either end of the strip: an arrow in that end's gutter.
+			RE::GFxValue arrows;
+			if (!bar.GetMember("arrows", &arrows) || !arrows.IsDisplayObject()) { bar.CreateEmptyMovieClip(&arrows, "arrows", 20); }
+			if (arrows.IsDisplayObject()) {
+				arrows.Invoke("clear");
+				if (s.first > 0) { Triangle(arrows, kStripX, true); }
+				if (s.first + kVisible < s.count) { Triangle(arrows, kLeft + kWidth - kArrow, false); }
+			}
+			// The button hint, in the filter row's free left side, while the bar has the controller.
+			const Look hint{ kFilterRowY, 20.0, 12.0, false, "left" };
+			DrawButton(a_movie, bar, "hint", 30, kLeft, kWidth - 70.0,
+					   s.focused && !s.renaming ? strings::TR("SLSC_HintBar", "Y: Rename   A: Select   B: Back") : std::string(), false, false, hint);
+			DrawRename(a_movie, bar, s);
 		}
 	}
 
@@ -203,6 +339,15 @@ namespace bar
 			g_snap.inventoryOpen = true;
 			g_snap.count = settings::Get().count;
 			g_snap.active = loadouts::Active();   // from the co-save after a load, or the last switch
+			if (!g_snap.built) {                  // a fresh opening: the strip starts with the active loadout in view
+				g_snap.first = 0;
+				g_snap.renaming = false;
+				if (g_snap.active >= 0) {
+					const int keep = std::exchange(g_snap.cursor, g_snap.active);
+					KeepInView(g_snap);
+					g_snap.cursor = keep;
+				}
+			}
 		}
 		RE::GFxValue existing;
 		if (a_movie == g_movie && a_movie->GetVariable(&existing, kBarPath) && existing.IsDisplayObject()) { return; }
@@ -278,18 +423,24 @@ namespace bar
 			std::scoped_lock l(g_lock);
 			if (g_snap.focused == a_on) { return; }
 			g_snap.focused = a_on;
-			if (a_on) { g_snap.cursor = g_snap.active != -1 ? ButtonOf(g_snap.active, g_snap.count) : 0; }
+			if (a_on) {
+				g_snap.cursor = g_snap.active != -1 ? ButtonOf(g_snap.active) : 0;
+				KeepInView(g_snap);
+			}
 		}
 		Redraw(a_movie);
 	}
 
+	// Left and right walk Always worn, Loadout 1, 2 ... in the order they stand on the bar, and wrap round.
 	void Move(RE::GFxMovieView* a_movie, int a_delta)
 	{
 		{
 			std::scoped_lock l(g_lock);
 			if (g_snap.count <= 0) { return; }
-			const int buttons = Buttons(g_snap.count);
-			g_snap.cursor = (g_snap.cursor + a_delta + buttons) % buttons;
+			const int places = g_snap.count + 1;
+			const int at = (g_snap.cursor + 1 + a_delta % places + places) % places;
+			g_snap.cursor = at - 1;
+			KeepInView(g_snap);
 		}
 		Redraw(a_movie);
 	}
@@ -299,7 +450,7 @@ namespace bar
 		int target;
 		{
 			std::scoped_lock l(g_lock);
-			const int chosen = g_snap.cursor == g_snap.count ? loadouts::kAlwaysWorn : g_snap.cursor;
+			const int chosen = g_snap.cursor == kAlways ? loadouts::kAlwaysWorn : g_snap.cursor;
 			target = g_snap.active == chosen ? -1 : chosen;
 		}
 		std::string why;
@@ -312,6 +463,193 @@ namespace bar
 			g_snap.active = target;   // the move runs as a task right after this dispatch
 		}
 		Decide(target >= 0 ? std::format("loadout {} selected", target + 1) : target == loadouts::kAlwaysWorn ? std::string("Always worn selected") : std::string("loadout deselected"));
+		Redraw(a_movie);
+	}
+
+	// The pointer's place in the bar's own coordinates (the bar is drawn in the lists' space, so _xmouse/_ymouse of
+	// its clip are the numbers it was drawn with). False when the pointer cannot be read.
+	namespace
+	{
+		bool Pointer(RE::GFxMovieView* a_movie, double& a_x, double& a_y)
+		{
+			RE::GFxValue bar, x, y;
+			if (!a_movie || !a_movie->GetVariable(&bar, kBarPath) || !bar.IsDisplayObject() || !bar.GetMember("_xmouse", &x) || !bar.GetMember("_ymouse", &y) ||
+				!x.IsNumber() || !y.IsNumber()) {
+				return false;
+			}
+			a_x = x.GetNumber();
+			a_y = y.GetNumber();
+			return true;
+		}
+	}
+
+	bool Hover(RE::GFxMovieView* a_movie, int& a_hit)
+	{
+		a_hit = -2;
+		double x = 0, y = 0;
+		if (!Pointer(a_movie, x, y) || y < kTop || y > kTop + kHeight || x < kLeft || x > kLeft + kWidth) { return false; }
+		std::scoped_lock l(g_lock);
+		if (x < kLeft + kAlwaysWidth) {
+			a_hit = kAlways;
+		} else {
+			for (int slot = 0; slot < Visible(g_snap.count); ++slot) {
+				if (x >= SlotX(slot) && x <= SlotX(slot) + kButtonW) {
+					a_hit = g_snap.first + slot;
+					break;
+				}
+			}
+		}
+		return true;
+	}
+
+	void Scroll(RE::GFxMovieView* a_movie, int a_delta)
+	{
+		{
+			std::scoped_lock l(g_lock);
+			const int before = g_snap.first;
+			g_snap.first = std::clamp(g_snap.first + a_delta, 0, MaxFirst(g_snap.count));
+			if (g_snap.focused && g_snap.cursor >= 0) {   // the highlight stays on a button that is shown
+				g_snap.cursor = std::clamp(g_snap.cursor, g_snap.first, g_snap.first + Visible(g_snap.count) - 1);
+			}
+			if (g_snap.first == before) { return; }
+		}
+		Decide(std::format("wheel: strip scrolled by {}", a_delta));
+		Redraw(a_movie);
+	}
+
+	void Click(RE::GFxMovieView* a_movie, int a_hit)
+	{
+		{
+			std::scoped_lock l(g_lock);
+			g_snap.cursor = a_hit;
+		}
+		Choose(a_movie);
+	}
+
+	bool Renaming()
+	{
+		std::scoped_lock l(g_lock);
+		return g_snap.renaming;
+	}
+
+	bool FocusedOnLoadout()
+	{
+		std::scoped_lock l(g_lock);
+		return g_snap.focused && g_snap.cursor >= 0;
+	}
+
+	int Cursor()
+	{
+		std::scoped_lock l(g_lock);
+		return g_snap.cursor;
+	}
+
+	bool BeginRename(RE::GFxMovieView* a_movie, int a_loadout)
+	{
+		{
+			std::scoped_lock l(g_lock);
+			if (a_loadout < 0 || a_loadout >= g_snap.count || g_snap.renaming) { return false; }
+			g_snap.renaming = true;
+			g_snap.renameSlot = a_loadout;
+			g_snap.renameText = loadouts::CustomName(a_loadout);
+			g_snap.shift = false;
+			g_snap.keyRow = 0;
+			g_snap.keyCol = 0;
+		}
+		Decide(std::format("rename of loadout {} opened", a_loadout + 1));
+		Redraw(a_movie);
+		return true;
+	}
+
+	namespace
+	{
+		constexpr std::size_t kMaxName = 24;
+
+		void Append(Snapshot& a_s, char a_c)
+		{
+			if (a_s.renameText.size() < kMaxName) { a_s.renameText += a_c; }
+		}
+	}
+
+	void RenameChar(RE::GFxMovieView* a_movie, char a_char)
+	{
+		{
+			std::scoped_lock l(g_lock);
+			if (!g_snap.renaming) { return; }
+			if (a_char == '\b') {
+				if (!g_snap.renameText.empty()) { g_snap.renameText.pop_back(); }
+			} else {
+				if ((g_snap.shift || g_snap.shiftHeld) && a_char >= 'a' && a_char <= 'z') { a_char = static_cast<char>(a_char - 'a' + 'A'); }
+				Append(g_snap, a_char);
+			}
+		}
+		Redraw(a_movie);
+	}
+
+	void RenameShift(bool a_held)
+	{
+		std::scoped_lock l(g_lock);
+		g_snap.shiftHeld = a_held;
+	}
+
+	void RenameStep(RE::GFxMovieView* a_movie, RenameKey a_key)
+	{
+		bool save = false, cancel = false;
+		int slot = -1;
+		std::string text;
+		{
+			std::scoped_lock l(g_lock);
+			if (!g_snap.renaming) { return; }
+			auto& s = g_snap;
+			const int cols = s.keyRow == 4 ? kActions : 10;
+			auto act = [&](int a_col) {
+				switch (a_col) {
+				case 0: s.shift = !s.shift; break;
+				case 1: Append(s, ' '); break;
+				case 2: if (!s.renameText.empty()) { s.renameText.pop_back(); } break;
+				case 3: s.renameText.clear(); break;
+				default: save = true; break;
+				}
+			};
+			switch (a_key) {
+			case RenameKey::left: s.keyCol = (s.keyCol + cols - 1) % cols; break;
+			case RenameKey::right: s.keyCol = (s.keyCol + 1) % cols; break;
+			case RenameKey::up:
+			case RenameKey::down: {
+				const int oldCols = cols;
+				s.keyRow = (s.keyRow + (a_key == RenameKey::up ? kRenameRows - 1 : 1)) % kRenameRows;
+				const int newCols = s.keyRow == 4 ? kActions : 10;
+				s.keyCol = std::min(newCols - 1, s.keyCol * newCols / oldCols);   // the same place across the row
+				break;
+			}
+			case RenameKey::accept:
+				if (s.keyRow == 4) {
+					act(s.keyCol);
+				} else {
+					char ch = kKeyRows[static_cast<std::size_t>(s.keyRow)][s.keyCol];
+					if (s.shift && ch >= 'a' && ch <= 'z') { ch = static_cast<char>(ch - 'a' + 'A'); }
+					Append(s, ch);
+				}
+				break;
+			case RenameKey::erase: if (!s.renameText.empty()) { s.renameText.pop_back(); } break;
+			case RenameKey::save: save = true; break;
+			case RenameKey::cancel: cancel = true; break;
+			}
+			if (save || cancel) {
+				slot = s.renameSlot;
+				text = s.renameText;
+				s.renaming = false;
+				s.renameSlot = -1;
+			}
+		}
+		if (save) {
+			while (!text.empty() && text.back() == ' ') { text.pop_back(); }
+			while (!text.empty() && text.front() == ' ') { text.erase(text.begin()); }
+			loadouts::SetCustomName(slot, text);
+			Decide(text.empty() ? std::format("loadout {} name cleared", slot + 1) : std::format("loadout {} renamed to \"{}\"", slot + 1, text));
+		} else if (cancel) {
+			Decide("rename cancelled");
+		}
 		Redraw(a_movie);
 	}
 

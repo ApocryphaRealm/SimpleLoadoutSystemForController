@@ -22,7 +22,7 @@ namespace settings
 		const std::string full = std::filesystem::absolute(g_path).string();
 		g_values.iniFound = std::filesystem::exists(full);
 
-		g_values.count = std::clamp(static_cast<int>(GetPrivateProfileIntA("General", "iLoadoutCount", 5, full.c_str())), 1, kMaxLoadouts);
+		g_values.count = std::clamp(static_cast<int>(GetPrivateProfileIntA("General", "iLoadoutCount", 10, full.c_str())), 1, kMaxLoadouts);
 		g_values.names.clear();
 		for (int i = 1; i <= kMaxLoadouts; ++i) {
 			char buf[128]{};

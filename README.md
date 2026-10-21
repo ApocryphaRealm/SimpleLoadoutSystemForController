@@ -10,10 +10,16 @@ inventory and your carry weight. Pick it again and it all comes back and is equi
 
 HOW IT WORKS
 ------------
-- A row of loadout buttons (five by default) sits at the top of the inventory. The search box moves to a row under
-  it; the categories and the item list move down one row.
-- Controller: D-pad Up on the list's top row goes to the bar. Left / Right choose a loadout, A selects it (A on the
-  active loadout deselects it), D-pad Down or B goes back to the list. Keyboard: the arrow keys, Enter and Esc.
+- A bar sits at the top of the inventory: "Always worn" fixed at the far left, then up to ten loadouts (ten by default)
+  in a strip beside it that shows five at a time. A small triangle at the strip's left or right end says more
+  loadouts lie that way. The search box moves to a row under the bar; the categories and the item list move down one row.
+- Controller: D-pad Up on the list's top row goes to the bar. Left / Right walk Always worn and the loadouts (the strip
+  scrolls to keep the highlighted one in view), A selects it (A on the active loadout deselects it), Y renames the
+  highlighted loadout, D-pad Down or B goes back to the list. Keyboard: the arrow keys, Enter and Esc, F2 to rename.
+- Mouse: the wheel over the bar scrolls the strip, a left click on a button selects it, a right click renames it.
+- Renaming opens a small on-screen keyboard over the inventory: D-pad walks the keys, A types, X erases, Y saves, B
+  cancels (with a real keyboard: type, Backspace, Enter saves, Esc cancels). The name is saved with the game, one per
+  loadout; saving an empty name goes back to the INI name, or "Loadout N". Names too long for a button end in "...".
 - Selecting a loadout takes off everything you are wearing. Those items stay in your inventory - they belonged to no
   loadout. If the loadout already holds gear, it comes out of storage and is equipped, weapons in the hand they were
   in.
@@ -37,7 +43,7 @@ HOW IT WORKS
 SETTINGS
 --------
 Data/SKSE/Plugins/SimpleLoadoutSystemForController.ini (edit it with the game closed):
-- iLoadoutCount   how many loadout buttons (1-10, default 5)
+- iLoadoutCount   how many loadouts (1-10, default 10)
 - sLoadoutName1-10   the buttons' names ("Loadout N" when empty)
 - bAllowSwitchInCombat   1 = loadouts can be switched during combat; 0 = refused in combat (default 0)
 - uLogLevel   log detail (2 = info)

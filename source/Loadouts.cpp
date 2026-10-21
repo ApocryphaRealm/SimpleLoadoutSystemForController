@@ -27,6 +27,8 @@ namespace loadouts
 		inline constexpr std::uint32_t kActive = 'ACTV';
 		inline constexpr std::uint32_t kLeft = 'LEFT';
 		inline constexpr std::uint32_t kKeep = 'KEEP';
+		inline constexpr std::uint32_t kName = 'NAME';   // 1.0.4: a loadout's own name (slot, length, bytes)
+		inline constexpr std::uint32_t kMaxName = 24;
 		inline constexpr std::uint32_t kMaxKept = 64;
 
 		// One always-worn piece: the item and its enchantment (0 for none) - so a player-enchanted Gold Ring is told
@@ -44,6 +46,7 @@ namespace loadouts
 		std::atomic<bool> g_busy{ false };
 		std::mutex g_lock;
 		std::array<std::set<RE::FormID>, settings::kMaxLoadouts> g_leftHand;   // weapons each loadout had in the left hand
+		std::array<std::string, settings::kMaxLoadouts> g_names;                  // the names the player gave (g_lock)
 		std::vector<Kept> g_kept;                                                 // the always-worn set (g_lock)
 
 		struct Worn
@@ -422,6 +425,13 @@ namespace loadouts
 			a_intfc->WriteRecordData(active);
 			std::scoped_lock l(g_lock);
 			for (std::uint32_t i = 0; i < settings::kMaxLoadouts; ++i) {
+				if (g_names[i].empty() || !a_intfc->OpenRecord(kName, 1)) { continue; }
+				const std::uint32_t n = static_cast<std::uint32_t>(g_names[i].size());
+				a_intfc->WriteRecordData(i);
+				a_intfc->WriteRecordData(n);
+				a_intfc->WriteRecordData(g_names[i].data(), n);
+			}
+			for (std::uint32_t i = 0; i < settings::kMaxLoadouts; ++i) {
 				if (g_leftHand[i].empty()) { continue; }
 				if (!a_intfc->OpenRecord(kLeft, 1)) { continue; }
 				const std::uint32_t n = static_cast<std::uint32_t>(g_leftHand[i].size());
@@ -445,6 +455,7 @@ namespace loadouts
 		{
 			g_active = -1;
 			std::scoped_lock l(g_lock);
+			for (auto& n : g_names) { n.clear(); }
 			for (auto& s : g_leftHand) { s.clear(); }
 			g_kept.clear();
 		}
@@ -471,6 +482,16 @@ namespace loadouts
 					if (slot < settings::kMaxLoadouts) {
 						std::scoped_lock l(g_lock);
 						g_leftHand[slot] = std::move(ids);
+					}
+				} else if (type == kName && version == 1) {
+					std::uint32_t slot = 0, n = 0;
+					a_intfc->ReadRecordData(slot);
+					a_intfc->ReadRecordData(n);
+					std::string name(std::min<std::uint32_t>(n, kMaxName), '\0');
+					if (!name.empty()) { a_intfc->ReadRecordData(name.data(), static_cast<std::uint32_t>(name.size())); }
+					if (slot < settings::kMaxLoadouts) {
+						std::scoped_lock l(g_lock);
+						g_names[slot] = std::move(name);
 					}
 				} else if (type == kKeep && version == 1) {
 					std::uint32_t n = 0;
@@ -527,6 +548,23 @@ namespace loadouts
 		s->SetLoadCallback(OnLoad);
 		s->SetRevertCallback(OnRevert);
 		SelfCheck::Set("Co-save", true, "registered");
+	}
+
+	std::string CustomName(int a_loadout)
+	{
+		if (a_loadout < 0 || a_loadout >= settings::kMaxLoadouts) { return {}; }
+		std::scoped_lock l(g_lock);
+		return g_names[static_cast<std::size_t>(a_loadout)];
+	}
+
+	void SetCustomName(int a_loadout, const std::string& a_name)
+	{
+		if (a_loadout < 0 || a_loadout >= settings::kMaxLoadouts) { return; }
+		{
+			std::scoped_lock l(g_lock);
+			g_names[static_cast<std::size_t>(a_loadout)] = a_name.substr(0, kMaxName);
+		}
+		logger::info("loadout {} named \"{}\"", a_loadout + 1, a_name);
 	}
 
 	int Active() { return g_active.load(); }

@@ -20,13 +20,16 @@ namespace InputHook
 
 		// XInput masks as Skyrim's ButtonEvent carries them, and DirectInput scan codes.
 		inline constexpr std::uint32_t kPadUp = 0x0001, kPadDown = 0x0002, kPadLeft = 0x0004, kPadRight = 0x0008;
-		inline constexpr std::uint32_t kPadA = 0x1000, kPadB = 0x2000;
+		inline constexpr std::uint32_t kPadA = 0x1000, kPadB = 0x2000, kPadX = 0x4000, kPadY = 0x8000;
 		inline constexpr std::uint32_t kKeyEsc = 1, kKeyEnter = 28, kKeyE = 18, kKeyUp = 200, kKeyDown = 208, kKeyLeft = 203, kKeyRight = 205;
+		// 1.0.4: F2 renames the highlighted loadout, a right-click on its button too; the wheel over the bar scrolls it.
+		inline constexpr std::uint32_t kKeyF2 = 60, kKeyBackspace = 14, kKeyShiftL = 42, kKeyShiftR = 54;
+		inline constexpr std::uint32_t kMouseLeft = 0, kMouseRight = 1, kMouseWheelUp = 8, kMouseWheelDown = 9;
 
 		// Menus that sit ON TOP of the inventory and take its input.
 		inline constexpr const char* kCoveringMenus[] = { "MessageBoxMenu", "Book Menu", "Console", "ContainerMenu", "Journal Menu" };
 
-		enum class Key { none, up, down, left, right, accept, back };
+		enum class Key { none, up, down, left, right, accept, back, rename };
 
 		Key Classify(RE::INPUT_DEVICE a_device, std::uint32_t a_code)
 		{
@@ -38,6 +41,7 @@ namespace InputHook
 				case kPadRight: return Key::right;
 				case kPadA: return Key::accept;
 				case kPadB: return Key::back;
+				case kPadY: return Key::rename;
 				default: return Key::none;
 				}
 			}
@@ -50,6 +54,7 @@ namespace InputHook
 				case kKeyEnter:
 				case kKeyE: return Key::accept;
 				case kKeyEsc: return Key::back;
+				case kKeyF2: return Key::rename;
 				default: return Key::none;
 				}
 			}
@@ -85,13 +90,103 @@ namespace InputHook
 			return menu ? menu->uiMovie.get() : nullptr;
 		}
 
+
+		// A letter, digit or mark for a DirectInput scan code (the rename box is typed in with the real keyboard too).
+		char CharOf(std::uint32_t a_code)
+		{
+			static constexpr const char* kRow1 = "1234567890-";     // scan codes 2-12
+			static constexpr const char* kRow2 = "qwertyuiop";      // 16-25
+			static constexpr const char* kRow3 = "asdfghjkl";       // 30-38
+			static constexpr const char* kRow4 = "zxcvbnm,.";       // 44-52
+			if (a_code >= 2 && a_code <= 12) { return kRow1[a_code - 2]; }
+			if (a_code >= 16 && a_code <= 25) { return kRow2[a_code - 16]; }
+			if (a_code >= 30 && a_code <= 38) { return kRow3[a_code - 30]; }
+			if (a_code >= 44 && a_code <= 52) { return kRow4[a_code - 44]; }
+			if (a_code == 57) { return ' '; }
+			if (a_code == 40) { return '\''; }
+			return 0;
+		}
+
+		// While the rename keyboard is up every button press belongs to it: nothing reaches the inventory.
+		bool FilterRename(RE::ButtonEvent* a_button, RE::GFxMovieView* a_movie)
+		{
+			const auto device = a_button->GetDevice();
+			const auto code = a_button->GetIDCode();
+			if (device == RE::INPUT_DEVICE::kKeyboard && (code == kKeyShiftL || code == kKeyShiftR)) {
+				bar::RenameShift(a_button->IsPressed());
+				return true;
+			}
+			if (!a_button->IsDown()) { return true; }
+			const Key key = Classify(device, code);
+			if (device == RE::INPUT_DEVICE::kGamepad) {
+				switch (code) {
+				case kPadX: bar::RenameStep(a_movie, bar::RenameKey::erase); break;
+				case kPadY: bar::RenameStep(a_movie, bar::RenameKey::save); break;
+				default: break;
+				}
+			}
+			switch (key) {
+			case Key::up: bar::RenameStep(a_movie, bar::RenameKey::up); break;
+			case Key::down: bar::RenameStep(a_movie, bar::RenameKey::down); break;
+			case Key::left: bar::RenameStep(a_movie, bar::RenameKey::left); break;
+			case Key::right: bar::RenameStep(a_movie, bar::RenameKey::right); break;
+			case Key::back: bar::RenameStep(a_movie, bar::RenameKey::cancel); break;
+			case Key::accept:
+				if (device == RE::INPUT_DEVICE::kGamepad) {
+					bar::RenameStep(a_movie, bar::RenameKey::accept);
+				} else if (code == kKeyEnter) {
+					bar::RenameStep(a_movie, bar::RenameKey::save);
+				} else if (const char c = CharOf(code)) {
+					bar::RenameChar(a_movie, c);   // E on the keyboard types an e
+				}
+				break;
+			default:
+				if (device == RE::INPUT_DEVICE::kKeyboard) {
+					if (code == kKeyBackspace) {
+						bar::RenameChar(a_movie, '\b');
+					} else if (const char c = CharOf(code)) {
+						bar::RenameChar(a_movie, c);
+					}
+				}
+				break;
+			}
+			return true;
+		}
+
+		// The mouse over the bar: the wheel scrolls the strip, a left click picks a button, a right click renames it.
+		bool FilterMouse(RE::ButtonEvent* a_button, RE::GFxMovieView* a_movie)
+		{
+			const auto code = a_button->GetIDCode();
+			if (code == kMouseWheelUp || code == kMouseWheelDown) {
+				if (a_button->Value() == 0.0f) { return false; }
+				int hit;
+				if (!bar::Hover(a_movie, hit)) { return false; }
+				bar::Scroll(a_movie, code == kMouseWheelUp ? -1 : 1);
+				return true;
+			}
+			if (code != kMouseLeft && code != kMouseRight) { return false; }
+			const auto device = a_button->GetDevice();
+			if (!a_button->IsDown()) { return Swallowing(device, code, !a_button->IsPressed()); }
+			int hit;
+			if (!bar::Hover(a_movie, hit) || hit == -2) { return false; }
+			if (code == kMouseRight) {
+				bar::BeginRename(a_movie, hit);   // nothing for the Always worn box
+			} else {
+				bar::Click(a_movie, hit);
+			}
+			g_swallowing.push_back({ device, code });
+			return true;
+		}
+
 		// True when the event is swallowed. Main thread, inside the game's input dispatch.
 		bool Filter(RE::InputEvent* a_event, RE::GFxMovieView* a_movie)
 		{
 			auto* button = a_event->AsButtonEvent();
 			if (!button) { return false; }
+			if (bar::Renaming()) { return FilterRename(button, a_movie); }
 			const auto device = button->GetDevice();
 			const auto code = button->GetIDCode();
+			if (device == RE::INPUT_DEVICE::kMouse) { return FilterMouse(button, a_movie); }
 			const Key key = Classify(device, code);
 			if (key == Key::none) { return false; }
 
@@ -113,6 +208,9 @@ namespace InputHook
 			case Key::left: bar::Move(a_movie, -1); break;
 			case Key::right: bar::Move(a_movie, 1); break;
 			case Key::accept: bar::Choose(a_movie); break;
+			case Key::rename:   // Y / F2 on a loadout; on Always worn it only keeps the favourite button away from the list
+				if (bar::FocusedOnLoadout()) { bar::BeginRename(a_movie, bar::Cursor()); }
+				break;
 			case Key::down:
 			case Key::back:
 				bar::Focus(a_movie, false);

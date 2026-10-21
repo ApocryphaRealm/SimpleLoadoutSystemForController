@@ -26,5 +26,10 @@ namespace loadouts
 	// happen now (in combat, the containers missing). The move itself runs as a task after the current input dispatch.
 	bool Request(int a_loadout, std::string& a_why);
 
+	// The name the player gave a loadout (the bar's Y / F2 / right-click rename), kept in the co-save per loadout
+	// (record 'NAME'); empty when it has none. SetCustomName with empty text removes it.
+	std::string CustomName(int a_loadout);
+	void SetCustomName(int a_loadout, const std::string& a_name);
+
 	std::string ContentsJson();         // DevBench: active, worn items, the always-worn set, each container, weight
 }

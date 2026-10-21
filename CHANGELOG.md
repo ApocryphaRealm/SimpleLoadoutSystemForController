@@ -2,6 +2,20 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
+## 1.0.4 - 2026-10-21 - untested
+
+### Changed
+- The bar: "Always worn" now stands fixed at the far left, before Loadout 1. The loadouts sit in a fixed-width strip beside it, five at a time, and scroll. The strip ends where the old bar ended (the category icons' width), so ten loadouts no longer shrink every button. A triangle at the strip's left or right end says more loadouts lie that way.
+- iLoadoutCount now defaults to 10 (was 5). An existing INI keeps its own number; set it to 10 to see all ten.
+- Controller: Left / Right walk Always worn, Loadout 1, 2 ... and the strip scrolls to keep the highlighted one in view. Mouse: the wheel over the bar scrolls the strip; a left click on a button selects it.
+
+### Added
+- Rename a loadout: Y on the controller while a loadout is highlighted on the bar (F2 on the keyboard, right-click on the button). An on-screen keyboard opens over the inventory: D-pad walks the keys, A types, X erases, Y saves, B cancels (with a real keyboard: type, Enter saves, Esc cancels). The name is kept per loadout in the SKSE co-save; an empty name goes back to the INI name or "Loadout N"; a name too long for its button ends in "...". A button hint shows while the bar has the controller.
+- Eight new translated strings in all eleven languages.
+
+### Save compatibility
+- Loadouts 1-5 and Always worn are untouched: the same ten storage containers (REFR 0x803 + slot) and the same co-save records. Names are a new record ('NAME'); a save made before this build simply has none, and one made after it loads in 1.0.3 with the record ignored.
+
 ## 1.0.3 - 2026-10-13 - working
 
 ### Added
