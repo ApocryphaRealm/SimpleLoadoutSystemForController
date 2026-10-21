@@ -13,6 +13,9 @@ Every version, beside the code it describes. Status is the version ledger's word
 - Rename a loadout: Y on the controller while a loadout is highlighted on the bar (F2 on the keyboard, right-click on the button). An on-screen keyboard opens over the inventory: D-pad walks the keys, A types, X erases, Y saves, B cancels (with a real keyboard: type, Enter saves, Esc cancels). The name is kept per loadout in the SKSE co-save; an empty name goes back to the INI name or "Loadout N"; a name too long for its button ends in "...". A button hint shows while the bar has the controller.
 - Eight new translated strings in all eleven languages.
 
+### Diagnostics (rebuild after the first in-game test, 2026-10-21)
+- The first test beside Inventory Reforged reported no response to the bar and the log held nothing after "bar: drawn". Every focus, move, select, click, wheel and rename step is now logged at info, the first 60 presses reaching the bar's input filter are logged with what they were taken for, and a list row or pointer position that cannot be read is logged as a warning saying which part was missing.
+
 ### Save compatibility
 - Loadouts 1-5 and Always worn are untouched: the same ten storage containers (REFR 0x803 + slot) and the same co-save records. Names are a new record ('NAME'); a save made before this build simply has none, and one made after it loads in 1.0.3 with the record ignored.
 

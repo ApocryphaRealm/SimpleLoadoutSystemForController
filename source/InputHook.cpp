@@ -160,7 +160,10 @@ namespace InputHook
 			if (code == kMouseWheelUp || code == kMouseWheelDown) {
 				if (a_button->Value() == 0.0f) { return false; }
 				int hit;
-				if (!bar::Hover(a_movie, hit)) { return false; }
+				const bool over = bar::Hover(a_movie, hit);
+				static int told = 0;
+				if (told++ < 20) { logger::info("input: wheel code {} - pointer {} the bar", code, over ? "on" : "not on"); }
+				if (!over) { return false; }
 				bar::Scroll(a_movie, code == kMouseWheelUp ? -1 : 1);
 				return true;
 			}
@@ -168,7 +171,9 @@ namespace InputHook
 			const auto device = a_button->GetDevice();
 			if (!a_button->IsDown()) { return Swallowing(device, code, !a_button->IsPressed()); }
 			int hit;
-			if (!bar::Hover(a_movie, hit) || hit == -2) { return false; }
+			const bool over = bar::Hover(a_movie, hit);
+			logger::info("input: mouse button {} - pointer {} the bar, button {}", code, over ? "on" : "not on", hit);
+			if (!over || hit == -2) { return false; }
 			if (code == kMouseRight) {
 				bar::BeginRename(a_movie, hit);   // nothing for the Always worn box
 			} else {
@@ -183,9 +188,17 @@ namespace InputHook
 		{
 			auto* button = a_event->AsButtonEvent();
 			if (!button) { return false; }
-			if (bar::Renaming()) { return FilterRename(button, a_movie); }
 			const auto device = button->GetDevice();
 			const auto code = button->GetIDCode();
+			{   // 1.0.5: the first presses of each inventory opening are logged, so a test shows what reached the bar and what it decided
+				static int logged = 0;
+				if (button->IsDown() && !bar::Focused() ? logged < 60 : bar::Focused() || bar::Renaming()) {
+					if (button->IsDown() && !bar::Focused()) { ++logged; }
+					logger::info("input: device {} code 0x{:X} down {} -> {} (bar focused {}, renaming {})", static_cast<int>(device), code, button->IsDown(),
+								 static_cast<int>(Classify(device, code)), bar::Focused(), bar::Renaming());
+				}
+			}
+			if (bar::Renaming()) { return FilterRename(button, a_movie); }
 			if (device == RE::INPUT_DEVICE::kMouse) { return FilterMouse(button, a_movie); }
 			const Key key = Classify(device, code);
 			if (key == Key::none) { return false; }
@@ -197,7 +210,11 @@ namespace InputHook
 			if (!bar::Focused()) {
 				if (key != Key::up) { return false; }
 				const int row = bar::ListIndex(a_movie);
-				if (row > 0 || row == -2) { return false; }   // SkyUI's list takes Up unless it is on its first row (or empty)
+				if (row > 0 || row == -2) {
+					static int told = 0;
+					if (told++ < 20) { logger::info("input: Up with the list on row {} - stays with the list", row); }
+					return false;
+				}   // SkyUI's list takes Up unless it is on its first row (or empty)
 				bar::Focus(a_movie, true);
 				g_swallowing.push_back({ device, code });
 				bar::Decide(std::format("Up on row {} - focus to the bar", row));

@@ -328,7 +328,7 @@ namespace bar
 			std::scoped_lock l(g_lock);
 			g_snap.lastDecision = a_what;
 		}
-		logger::debug("bar: {}", a_what);
+		logger::info("bar: {}", a_what);   // info: every focus, move, select, click, wheel and rename step is in the log (1.0.5)
 	}
 
 	void Ensure(RE::GFxMovieView* a_movie)
@@ -401,15 +401,31 @@ namespace bar
 		// The ROW on screen, not selectedIndex: SkyUI's selectedIndex points into its whole entry array (every category,
 		// in load order), while each entry's filteredIndex is its place in the visible, sorted list (read from the running
 		// list, 2026-09-27 - selectedIndex was 3 on the top row). No selection at all (-1) counts as the top too.
+		// 1.0.5: says WHY a read failed (once per kind) - with Inventory Reforged's panel active the list could not be read.
 		RE::GFxValue list, selected, entry, filtered;
-		if (a_movie && a_movie->GetVariable(&list, kItemListPath) && list.IsObject() && list.GetMember("selectedIndex", &selected) &&
-			selected.IsNumber()) {
+		const char* why = nullptr;
+		if (!a_movie || !a_movie->GetVariable(&list, kItemListPath) || !list.IsObject()) {
+			why = "the item list is not at _root.Menu_mc.inventoryLists.itemList";
+		} else if (!list.GetMember("selectedIndex", &selected) || !selected.IsNumber()) {
+			why = "the item list has no numeric selectedIndex";
+		} else {
 			index = static_cast<int>(selected.GetNumber());
 			if (index >= 0) {
 				index = -2;
-				if (list.GetMember("selectedEntry", &entry) && entry.IsObject() && entry.GetMember("filteredIndex", &filtered) && filtered.IsNumber()) {
+				if (!list.GetMember("selectedEntry", &entry) || !entry.IsObject()) {
+					why = "selectedIndex is set but selectedEntry is not an object";
+				} else if (!entry.GetMember("filteredIndex", &filtered) || !filtered.IsNumber()) {
+					why = "selectedEntry has no numeric filteredIndex";
+				} else {
 					index = static_cast<int>(filtered.GetNumber());
 				}
+			}
+		}
+		if (why) {
+			static std::string last;
+			if (last != why) {
+				last = why;
+				logger::warn("bar: cannot read the list row: {} - Up cannot move to the bar while this holds", why);
 			}
 		}
 		std::scoped_lock l(g_lock);
@@ -475,6 +491,8 @@ namespace bar
 			RE::GFxValue bar, x, y;
 			if (!a_movie || !a_movie->GetVariable(&bar, kBarPath) || !bar.IsDisplayObject() || !bar.GetMember("_xmouse", &x) || !bar.GetMember("_ymouse", &y) ||
 				!x.IsNumber() || !y.IsNumber()) {
+				static bool told = false;
+				if (!told) { told = true; logger::warn("bar: the pointer position (_xmouse/_ymouse) cannot be read from the bar clip"); }
 				return false;
 			}
 			a_x = x.GetNumber();
@@ -487,7 +505,12 @@ namespace bar
 	{
 		a_hit = -2;
 		double x = 0, y = 0;
-		if (!Pointer(a_movie, x, y) || y < kTop || y > kTop + kHeight || x < kLeft || x > kLeft + kWidth) { return false; }
+		const bool known = Pointer(a_movie, x, y);
+		{
+			static int told = 0;
+			if (known && told++ < 20) { logger::info("bar: pointer at ({:.0f}, {:.0f}) in the bar's space", x, y); }
+		}
+		if (!known || y < kTop || y > kTop + kHeight || x < kLeft || x > kLeft + kWidth) { return false; }
 		std::scoped_lock l(g_lock);
 		if (x < kLeft + kAlwaysWidth) {
 			a_hit = kAlways;
