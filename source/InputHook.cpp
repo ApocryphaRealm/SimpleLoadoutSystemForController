@@ -107,6 +107,8 @@ namespace InputHook
 			return 0;
 		}
 
+		void EnsureOutermost();   // below: puts the rename swallow ahead of every other plugin's input hook
+
 		// While the rename keyboard is up every button press belongs to it: nothing reaches the inventory.
 		bool FilterRename(RE::ButtonEvent* a_button, RE::GFxMovieView* a_movie)
 		{
@@ -175,7 +177,7 @@ namespace InputHook
 			logger::info("input: mouse button {} - pointer {} the bar, button {}", code, over ? "on" : "not on", hit);
 			if (!over || hit == -2) { return false; }
 			if (code == kMouseRight) {
-				bar::BeginRename(a_movie, hit);   // nothing for the Always worn box
+				if (bar::BeginRename(a_movie, hit)) { EnsureOutermost(); }   // nothing for the Always worn box
 			} else {
 				bar::Click(a_movie, hit);
 			}
@@ -198,7 +200,11 @@ namespace InputHook
 								 static_cast<int>(Classify(device, code)), bar::Focused(), bar::Renaming());
 				}
 			}
-			if (bar::Renaming()) { return FilterRename(button, a_movie); }
+			if (bar::Renaming()) {
+				const bool taken = FilterRename(button, a_movie);
+				if (!bar::Renaming()) { g_swallowing.push_back({ device, code }); }   // Enter, Esc or Y closed it: its release is the keyboard's too
+				return taken;
+			}
 			if (device == RE::INPUT_DEVICE::kMouse) { return FilterMouse(button, a_movie); }
 			const Key key = Classify(device, code);
 			if (key == Key::none) { return false; }
@@ -226,7 +232,7 @@ namespace InputHook
 			case Key::right: bar::Move(a_movie, 1); break;
 			case Key::accept: bar::Choose(a_movie); break;
 			case Key::rename:   // Y / F2 on a loadout; on Always worn it only keeps the favourite button away from the list
-				if (bar::FocusedOnLoadout()) { bar::BeginRename(a_movie, bar::Cursor()); }
+				if (bar::FocusedOnLoadout() && bar::BeginRename(a_movie, bar::Cursor())) { EnsureOutermost(); }
 				break;
 			case Key::down:
 			case Key::back:
@@ -237,6 +243,84 @@ namespace InputHook
 			}
 			g_swallowing.push_back({ device, code });
 			return true;
+		}
+
+
+		// 1.0.4 rebuild: the rename keyboard must be the ONLY reader of the keyboard and pad while it is open. Back Pocket
+		// installed its PollInputDevices hook after this one, so its hook ran first and took the B key (its Pocket key)
+		// and Perfected Wheeler's edit-mode key never reached this filter (2026-10-21 test: typing "b" opened Wheeler's
+		// edit mode and the next letter and Enter were lost; this log saw no event for B at all). A second hook on the
+		// same call site, installed the first time a rename opens, sits outside every hook installed before it: while
+		// renaming it removes every button and character event from the list BEFORE the hooks and sinks behind it are
+		// handed the list, so they never see a key; otherwise it passes the list straight on.
+		struct OuterHook
+		{
+			static inline REL::Relocation<void(RE::BSTEventSource<RE::InputEvent*>*, RE::InputEvent**)> func;
+
+			static void thunk(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent** a_events)
+			{
+				if (a_events && bar::Renaming()) {
+					auto* movie = InventoryInFront();
+					int taken = 0;
+					for (RE::InputEvent** link = a_events; *link;) {
+						RE::InputEvent* ev = *link;
+						bool take = false;
+						if (auto* button = ev->AsButtonEvent()) {
+							take = true;
+							if (movie && bar::Renaming()) {
+								const auto device = button->GetDevice();
+								const auto code = button->GetIDCode();
+								FilterRename(button, movie);
+								if (!bar::Renaming()) { g_swallowing.push_back({ device, code }); }
+							}
+						} else if (ev->GetEventType() == RE::INPUT_EVENT_TYPE::kChar) {
+							take = true;
+						}
+						if (take) {
+							*link = ev->next;
+							++taken;
+							continue;
+						}
+						link = &ev->next;
+					}
+					if (taken) {
+						static int told = 0;
+						if (told++ < 30) { logger::info("input: rename open - {} event(s) taken before the other input hooks", taken); }
+					}
+				}
+				func(a_dispatcher, a_events);
+			}
+		};
+
+		std::uintptr_t g_outerTarget = 0;   // where the call site pointed right after the outer hook was written
+		bool g_outerQueued = false;
+
+		std::uintptr_t SiteTarget(std::uintptr_t a_site)
+		{
+			return a_site + 5 + *reinterpret_cast<const std::int32_t*>(a_site + 1);
+		}
+
+		void EnsureOutermost()
+		{
+			const std::uintptr_t site = kPollInputDevicesID.address() + kPollInputDevicesOffset;
+			if (g_outerTarget != 0) {
+				if (SiteTarget(site) != g_outerTarget) {
+					logger::warn("input: another plugin hooked PollInputDevices after the rename swallow - it sees keys first now and cannot be blocked from here");
+				}
+				return;
+			}
+			if (g_outerQueued) { return; }
+			g_outerQueued = true;
+			// A task, not inline: the call site is being executed right now.
+			SKSE::GetTaskInterface()->AddTask([site] {
+				if (!REL::make_pattern<"E8">().match(site)) {
+					logger::error("input: PollInputDevices site is no longer a call - the rename swallow is NOT outermost");
+					return;
+				}
+				OuterHook::func = SKSE::GetTrampoline().write_call<5>(site, OuterHook::thunk);
+				g_outerTarget = SiteTarget(site);
+				logger::info("input: rename swallow installed ahead of every other PollInputDevices hook");
+			});
 		}
 
 		struct PollInputDevicesHook
@@ -280,7 +364,7 @@ namespace InputHook
 			SelfCheck::Set("Input hook", false, std::format("site 0x{:X} (ID {}+0x{:X}) is not a call", site, kPollInputDevicesID.id(), kPollInputDevicesOffset));
 			return false;
 		}
-		SKSE::AllocTrampoline(14);
+		SKSE::AllocTrampoline(14 * 4);   // this hook, and the rename swallow installed later
 		PollInputDevicesHook::func = SKSE::GetTrampoline().write_call<5>(site, PollInputDevicesHook::thunk);
 		logger::info("PollInputDevices hook installed at 0x{:X} (ID {}+0x{:X})", site, kPollInputDevicesID.id(), kPollInputDevicesOffset);
 		SelfCheck::Set("Input hook", true, std::format("installed at 0x{:X} (ID {}+0x{:X})", site, kPollInputDevicesID.id(), kPollInputDevicesOffset));

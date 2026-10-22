@@ -11,6 +11,7 @@
 #include <format>
 #include <mutex>
 #include <set>
+#include <map>
 #include <vector>
 
 #undef GetObject   // Windows.h maps it to GetObjectW, which hides InventoryEntryData::GetObject
@@ -159,6 +160,7 @@ namespace loadouts
 					logger::debug("store: {:08X} \"{}\" is always worn - left on", w.object->GetFormID(), w.object->GetName());
 					continue;
 				}
+				if (w.object->IsAmmo()) { logger::info("store: ammo {:08X} \"{}\" x{} (the whole stack is moved)", w.object->GetFormID(), w.object->GetName(), w.count); }
 				if (storage && !w.quest) {
 					if (w.left && w.object->IsWeapon()) { left.insert(w.object->GetFormID()); }
 					// Removing a worn item unequips it; the item keeps its own ExtraDataList.
@@ -246,6 +248,14 @@ namespace loadouts
 			for (auto& [object, data] : contents) {
 				auto& [count, entry] = data;
 				if (count <= 0 || !object) { continue; }
+				if (object->IsAmmo()) {   // ammunition is one stack: moved and worn in one piece, never split by its extra data
+					int extraLists = 0;
+					if (entry && entry->extraLists) { for (auto* x : *entry->extraLists) { extraLists += x ? 1 : 0; } }
+					logger::info("restore: ammo {:08X} \"{}\" x{} from loadout {} ({} extra list(s))", object->GetFormID(), object->GetName(), count, a_from + 1,
+								 extraLists);
+					pieces.push_back({ object, nullptr, count });
+					continue;
+				}
 				std::int32_t listed = 0;
 				if (entry && entry->extraLists) {
 					for (auto* extra : *entry->extraLists) {
@@ -387,6 +397,27 @@ namespace loadouts
 			return reapplied;
 		}
 
+		// Every ammunition type in the player's inventory and the ten containers, for the switch's conservation check: a
+		// switch only moves arrows, so the total of a type must not change (2026-10-21: 23 loose arrows appeared after a
+		// save and load).
+		std::map<RE::FormID, std::pair<std::string, int>> AmmoTotals(std::string& a_where)
+		{
+			std::map<RE::FormID, std::pair<std::string, int>> total;
+			auto add = [&](RE::TESObjectREFR* a_ref, const std::string& a_label) {
+				if (!a_ref) { return; }
+				for (auto& [object, data] : a_ref->GetInventory([](RE::TESBoundObject& a_o) { return a_o.IsAmmo(); })) {
+					if (data.first <= 0) { continue; }
+					auto& t = total[object->GetFormID()];
+					t.first = object->GetName();
+					t.second += data.first;
+					a_where += std::format(" {}:{:08X}x{}", a_label, object->GetFormID(), data.first);
+				}
+			};
+			add(RE::PlayerCharacter::GetSingleton(), "inv");
+			for (int i = 0; i < settings::kMaxLoadouts; ++i) { add(g_storage[static_cast<std::size_t>(i)], std::format("L{}", i + 1)); }
+			return total;
+		}
+
 		void Switch(int a_to)
 		{
 			auto* player = RE::PlayerCharacter::GetSingleton();
@@ -394,6 +425,8 @@ namespace loadouts
 				g_busy = false;
 				return;
 			}
+			std::string ammoBefore, ammoAfter;
+			const auto ammo0 = AmmoTotals(ammoBefore);
 			const int from = g_active.load();
 			int keptCount = -1;
 			if (from == kAlwaysWorn) { keptCount = CaptureKept(player); }
@@ -402,6 +435,16 @@ namespace loadouts
 			const int restored = a_to >= 0 ? Restore(player, a_to) : 0;
 			const int reapplied = ReapplyKept(player);
 			g_active = a_to;
+			if (!ammo0.empty() || !ammoBefore.empty()) {
+				const auto ammo1 = AmmoTotals(ammoAfter);
+				logger::info("ammo before:{}", ammoBefore);
+				logger::info("ammo after: {}", ammoAfter);
+				for (const auto& [id, t] : ammo0) {
+					const auto now = ammo1.find(id);
+					const int after = now == ammo1.end() ? 0 : now->second.second;
+					if (after != t.second) { logger::warn("ammo: {:08X} \"{}\" was {} in all containers before this switch and is {} after it", id, t.first, t.second, after); }
+				}
+			}
 			// The open inventory rebuilds its list from the engine's data (the inventory update message alone left
 			// SkyUI showing stored items, 2026-09-27).
 			if (auto* ui = RE::UI::GetSingleton(); ui && ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {

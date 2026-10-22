@@ -19,6 +19,10 @@ Every version, beside the code it describes. Status is the version ledger's word
 ### Fixed in the rebuild
 - The rename keyboard is drawn directly under the inventory movie's root and raised above every other clip (checked every frame while it is open), so Inventory Reforged's item window no longer covers it.
 
+### Fixed in the second rebuild
+- Typing in the rename keyboard no longer leaks to other mods. Back Pocket's input hook was installed after this mod's, so it ran first and took the B key (its Pocket key); Perfected Wheeler then saw B and opened its edit mode, and the following letter and Enter were lost. The first time a rename opens, the mod now puts a second hook on the same game call, outside every hook installed before it. While the keyboard is open that hook removes every key, pad and mouse button and every character event from the list before any other hook or event sink is handed it.
+- Ammunition is moved and put back on as one stack in one piece (it was split into several pieces when its extra data counted differently), and the log now records every ammunition store and restore and the total of each ammunition type across the inventory and the ten containers before and after each switch; a total that changes is logged as a warning. This follows the report of 23 extra Iron Arrows after a save and load; the cause was not proven offline.
+
 ### Save compatibility
 - Loadouts 1-5 and Always worn are untouched: the same ten storage containers (REFR 0x803 + slot) and the same co-save records. Names are a new record ('NAME'); a save made before this build simply has none, and one made after it loads in 1.0.3 with the record ignored.
 
