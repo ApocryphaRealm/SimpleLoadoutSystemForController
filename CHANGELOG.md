@@ -2,7 +2,7 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
-## 1.0.4 - 2026-10-21 - untested
+## 1.0.4 - 2026-10-21 - working
 
 ### Changed
 - The bar: "Always worn" now stands fixed at the far left, before Loadout 1. The loadouts sit in a fixed-width strip beside it, five at a time, and scroll. The strip ends where the old bar ended (the category icons' width), so ten loadouts no longer shrink every button. A triangle at the strip's left or right end says more loadouts lie that way.
@@ -27,8 +27,14 @@ Every version, beside the code it describes. Status is the version ledger's word
 - While the rename keyboard is open the inventory's 3D item is hidden (the engine draws it above the whole menu, so it showed through the keys) with the game's own GameDelegate call "UpdateItem3D", and shown again when the keyboard closes if a row is highlighted.
 - A worn marker left on an empty stack after a load (a worn "Iron Arrow" with count 0) is no longer treated as a piece: it is skipped by the worn scan, so it is not stored, counted, captured into Always worn or listed.
 
+### Tested
+- In game (SE line, Njordlinger Test, DLL fcb7c9cd, 2026-10-21, three runs; evidence in _work\sls-1.0.4-final-2026-10-21, _work\skyrim-round3-2026-10-21\C and _work\skyrim-round4-2026-10-21\C): ten loadouts in the scrolling strip with Always worn fixed on the left; mouse wheel and clicks; renaming with F2, right-click and pad Y through the on-screen keyboard, Esc / B cancelling; names and the active loadout kept across save and load; switching after a load; the keyboard above Inventory Reforged's item window; no key leaking to Back Pocket or Perfected Wheeler while typing; the 3D item hidden while the keyboard is open; no zero-count arrow entry. The 1.7 line is built from the same source and was not run.
+
 ### Save compatibility
 - Loadouts 1-5 and Always worn are untouched: the same ten storage containers (REFR 0x803 + slot) and the same co-save records. Names are a new record ('NAME'); a save made before this build simply has none, and one made after it loads in 1.0.3 with the record ignored.
+
+### Known
+- An arrow count change across save/load seen in testing was traced to outside SLS (no SLS ammo movement): the SLS log showed no ammunition store or restore at that moment, every ammunition before/after total matched, and in another run the count changed the other way (73 -> 50) after a restart with no SLS action.
 
 ## 1.0.3 - 2026-10-13 - working
 
