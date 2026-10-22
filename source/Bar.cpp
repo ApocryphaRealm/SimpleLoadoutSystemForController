@@ -617,6 +617,38 @@ namespace bar
 		return g_snap.cursor;
 	}
 
+	namespace
+	{
+		// The inventory's item model is drawn by the engine ABOVE the whole Scaleform movie, so it showed through the
+		// rename keyboard. The game's own item menu turns it on and off through GameDelegate "UpdateItem3D"
+		// (ItemMenu.as: true when a row is highlighted, false when the list is hidden); the keyboard does the same.
+		void Item3D(RE::GFxMovieView* a_movie, bool a_on)
+		{
+			RE::GFxValue delegate;
+			if (!a_movie || !a_movie->GetVariable(&delegate, "_global.gfx.io.GameDelegate") || !delegate.IsObject()) {
+				logger::warn("bar: GameDelegate was not found in the inventory movie - the 3D item stays as it is while renaming");
+				return;
+			}
+			RE::GFxValue name, flags;
+			a_movie->CreateString(&name, "UpdateItem3D");
+			a_movie->CreateArray(&flags);
+			flags.PushBack(RE::GFxValue(a_on));
+			std::array<RE::GFxValue, 2> args{ name, flags };
+			const bool ok = delegate.Invoke("call", nullptr, args.data(), args.size());
+			logger::info("bar: 3D item {} ({})", a_on ? "shown again" : "hidden for the rename keyboard", ok ? "GameDelegate.call made" : "GameDelegate.call FAILED");
+		}
+
+		// Back on only when a row is highlighted - the same condition the game's own menu uses.
+		void Restore3D(RE::GFxMovieView* a_movie)
+		{
+			RE::GFxValue list, selected;
+			if (a_movie && a_movie->GetVariable(&list, kItemListPath) && list.IsObject() && list.GetMember("selectedIndex", &selected) && selected.IsNumber() &&
+				selected.GetNumber() >= 0) {
+				Item3D(a_movie, true);
+			}
+		}
+	}
+
 	bool BeginRename(RE::GFxMovieView* a_movie, int a_loadout)
 	{
 		{
@@ -630,6 +662,7 @@ namespace bar
 			g_snap.keyCol = 0;
 		}
 		Decide(std::format("rename of loadout {} opened", a_loadout + 1));
+		Item3D(a_movie, false);
 		Redraw(a_movie);
 		return true;
 	}
@@ -723,6 +756,7 @@ namespace bar
 		} else if (cancel) {
 			Decide("rename cancelled");
 		}
+		if (save || cancel) { Restore3D(a_movie); }
 		Redraw(a_movie);
 	}
 

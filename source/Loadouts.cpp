@@ -76,7 +76,7 @@ namespace loadouts
 			auto inventory = a_actor->GetInventory([](RE::TESBoundObject& a_object) { return IsEquipment(&a_object); });
 			for (auto& [object, data] : inventory) {
 				auto& [count, entry] = data;
-				if (!entry || !entry->extraLists) { continue; }
+				if (count <= 0 || !entry || !entry->extraLists) { continue; }   // a worn marker left on an empty stack (seen after a load) is not a piece
 				const bool quest = entry->IsQuestObject();
 				for (auto* extra : *entry->extraLists) {
 					if (!extra) { continue; }
@@ -85,6 +85,7 @@ namespace loadouts
 					if (!right && !left) { continue; }
 					// Ammunition is worn as a whole stack; everything else one piece per list.
 					const std::int32_t n = object->IsAmmo() ? count : std::max(1, extra->GetCount());
+					if (n <= 0) { continue; }
 					out.push_back({ object, extra, n, left, quest });
 				}
 			}
