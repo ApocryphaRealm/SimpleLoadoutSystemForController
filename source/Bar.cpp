@@ -246,16 +246,55 @@ namespace bar
 		inline constexpr int kActions = 5;      // Shift, Space, Back, Clear, Save
 		inline constexpr double kPanelY = 60.0, kPanelH = 214.0, kCell = 30.0;
 
+		inline constexpr const char* kPanelPath = "_root.slsRename";
+
+		// 1.0.4 rebuild: the rename keyboard lives directly under _root, not in the lists, so it can sit above every other
+		// clip in the inventory movie (Inventory Reforged's item window sat over it when it was a child of the bar).
+		// Its origin is put where the lists' origin is on screen, so the keys keep the bar's coordinates.
+		void RaisePanel(RE::GFxMovieView* a_movie, RE::GFxValue& a_panel)
+		{
+			RE::GFxValue root, next, depth;
+			if (!a_movie->GetVariable(&root, "_root") || !root.IsDisplayObject()) { return; }
+			root.Invoke("getNextHighestDepth", &next);
+			if (!next.IsNumber()) { return; }
+			a_panel.Invoke("getDepth", &depth);
+			if (depth.IsNumber() && depth.GetNumber() >= next.GetNumber() - 1.0) { return; }   // already the top
+			std::array<RE::GFxValue, 1> args{ next };
+			a_panel.Invoke("swapDepths", nullptr, args.data(), args.size());
+			logger::info("bar: rename keyboard raised to depth {} (was {})", next.GetNumber(), depth.IsNumber() ? depth.GetNumber() : -1.0);
+		}
+
+		void PlacePanel(RE::GFxMovieView* a_movie, RE::GFxValue& a_panel)
+		{
+			RE::GFxValue lists, point, x, y;
+			if (!a_movie->GetVariable(&lists, kListsPath) || !lists.IsDisplayObject()) { return; }
+			a_movie->CreateObject(&point);
+			point.SetMember("x", RE::GFxValue(0.0));
+			point.SetMember("y", RE::GFxValue(0.0));
+			std::array<RE::GFxValue, 1> args{ point };
+			lists.Invoke("localToGlobal", nullptr, args.data(), args.size());
+			if (point.GetMember("x", &x) && point.GetMember("y", &y) && x.IsNumber() && y.IsNumber()) {
+				a_panel.SetMember("_x", x);
+				a_panel.SetMember("_y", y);
+			}
+		}
+
 		void DrawRename(RE::GFxMovieView* a_movie, RE::GFxValue& a_bar, const Snapshot& a_s)
 		{
 			RE::GFxValue panel;
-			if (!a_bar.GetMember("rename", &panel) || !panel.IsDisplayObject()) {
+			if (!a_movie->GetVariable(&panel, kPanelPath) || !panel.IsDisplayObject()) {
 				if (!a_s.renaming) { return; }
-				a_bar.CreateEmptyMovieClip(&panel, "rename", 40);
+				RE::GFxValue root, next;
+				if (!a_movie->GetVariable(&root, "_root") || !root.IsDisplayObject()) { return; }
+				root.Invoke("getNextHighestDepth", &next);
+				root.CreateEmptyMovieClip(&panel, "slsRename", next.IsNumber() ? static_cast<std::int32_t>(next.GetNumber()) : 16000);
 				if (!panel.IsDisplayObject()) { return; }
+				logger::info("bar: rename keyboard created under _root");
 			}
 			panel.SetMember("_visible", RE::GFxValue(a_s.renaming));
 			if (!a_s.renaming) { return; }
+			PlacePanel(a_movie, panel);
+			RaisePanel(a_movie, panel);
 			panel.Invoke("clear");
 			Rect(panel, 4.0, kPanelY, kWidth + 12.0, kPanelH, 0x101010, 97.0, kEdge, 1.0);
 			const Look wide{ kPanelY + 6.0, 28.0, 15.0, true, "left" };
@@ -350,7 +389,18 @@ namespace bar
 			}
 		}
 		RE::GFxValue existing;
-		if (a_movie == g_movie && a_movie->GetVariable(&existing, kBarPath) && existing.IsDisplayObject()) { return; }
+		if (a_movie == g_movie && a_movie->GetVariable(&existing, kBarPath) && existing.IsDisplayObject()) {
+			bool renaming;
+			{
+				std::scoped_lock l(g_lock);
+				renaming = g_snap.renaming;
+			}
+			if (renaming) {   // another clip may have been raised over the keyboard since the last frame
+				RE::GFxValue panel;
+				if (a_movie->GetVariable(&panel, kPanelPath) && panel.IsDisplayObject()) { RaisePanel(a_movie, panel); }
+			}
+			return;
+		}
 		strings::Tick();   // once per opening: follows a language change (AMF's, or the game's)
 
 		RE::GFxValue lists;
