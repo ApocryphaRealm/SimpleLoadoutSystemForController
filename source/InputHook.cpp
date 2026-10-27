@@ -216,11 +216,12 @@ namespace InputHook
 			if (!bar::Focused()) {
 				if (key != Key::up) { return false; }
 				const int row = bar::ListIndex(a_movie);
-				if (row > 0 || row == -2) {
+				if (row > 0 || row == -2 || row == bar::kNoSelection) {
 					static int told = 0;
-					if (told++ < 20) { logger::info("input: Up with the list on row {} - stays with the list", row); }
+					if (row == bar::kNoSelection) { logger::info("input: Up with no list row selected (Inventory Reforged's slots or the pointer hold it) - stays with the menu"); }
+					else if (told++ < 20) { logger::info("input: Up with the list on row {} - stays with the list", row); }
 					return false;
-				}   // SkyUI's list takes Up unless it is on its first row (or empty)
+				}   // SkyUI's list takes Up unless it is on its first row (or empty); with no row selected the menu keeps it
 				bar::Focus(a_movie, true);
 				g_swallowing.push_back({ device, code });
 				bar::Decide(std::format("Up on row {} - focus to the bar", row));

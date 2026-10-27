@@ -2,6 +2,11 @@
 
 Every version, beside the code it describes. Status is the version ledger's word for the build.
 
+## 1.0.5 - 2026-10-27 - untested
+
+### Fixed
+- With Inventory Reforged, D-pad Up while its slots have the controller (after R3) no longer jumps to the loadout bar. An item list with rows but no row selected (Inventory Reforged's slot mode, or the pointer off the list) now leaves Up to the menu; only the first row, or an empty list, moves Up to the bar. Before, every Up in the slots moved to the bar, and Left/Right then walked the loadout tabs instead of the slots (owner report 2026-10-27).
+
 ## 1.0.4 - 2026-10-21 - working
 
 ### Changed

@@ -45,7 +45,8 @@ namespace bar
 	void Ensure(RE::GFxMovieView* a_movie);
 	void Closed();                                   // the inventory went away: drop focus and the movie
 
-	int ListIndex(RE::GFxMovieView* a_movie);        // SkyUI's highlighted row, -1 when empty, -2 when unreadable
+	inline constexpr int kNoSelection = -3;          // the list has rows but none is selected (IR's slots or the pointer hold it)
+	int ListIndex(RE::GFxMovieView* a_movie);        // SkyUI's highlighted row, -1 when empty, -2 when unreadable, kNoSelection
 	void Focus(RE::GFxMovieView* a_movie, bool a_on);
 	void Move(RE::GFxMovieView* a_movie, int a_delta);
 	void Choose(RE::GFxMovieView* a_movie);          // the highlighted button: select it, or deselect when it is active

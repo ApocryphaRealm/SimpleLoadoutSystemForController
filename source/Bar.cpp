@@ -450,7 +450,7 @@ namespace bar
 		int index = -2;
 		// The ROW on screen, not selectedIndex: SkyUI's selectedIndex points into its whole entry array (every category,
 		// in load order), while each entry's filteredIndex is its place in the visible, sorted list (read from the running
-		// list, 2026-09-27 - selectedIndex was 3 on the top row). No selection at all (-1) counts as the top too.
+		// list, 2026-09-27 - selectedIndex was 3 on the top row). No selection (-1) counts as the top only in an empty list (1.0.5).
 		// 1.0.5: says WHY a read failed (once per kind) - with Inventory Reforged's panel active the list could not be read.
 		RE::GFxValue list, selected, entry, filtered;
 		const char* why = nullptr;
@@ -460,7 +460,15 @@ namespace bar
 			why = "the item list has no numeric selectedIndex";
 		} else {
 			index = static_cast<int>(selected.GetNumber());
-			if (index >= 0) {
+			if (index < 0) {
+				// 1.0.5: -1 is "no row selected", which is the top ONLY when the list has no rows. With rows in it, the
+				// selection is somewhere else - Inventory Reforged's slots (its R3 slot mode sets selectedIndex to -1) or
+				// the pointer - and Up belongs to that (owner report 2026-10-27: Up in IR's slots jumped to this bar).
+				RE::GFxValue size;
+				if (list.Invoke("getListEnumSize", &size, nullptr, 0) && size.IsNumber() && size.GetNumber() > 0) {
+					index = kNoSelection;
+				}
+			} else {
 				index = -2;
 				if (!list.GetMember("selectedEntry", &entry) || !entry.IsObject()) {
 					why = "selectedIndex is set but selectedEntry is not an object";
